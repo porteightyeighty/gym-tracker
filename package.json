@@ -1,0 +1,31 @@
+{
+  "name": "gym-tracker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "start": "node .output/server/index.mjs",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "seed": "node --env-file-if-exists=.env scripts/seed.ts",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "better-auth": "^1.7.15",
+    "drizzle-kit": "^0.31.11",
+    "drizzle-orm": "^0.45.4",
+    "nuxt": "^4.6.4",
+    "pg": "^8.23.1",
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.0",
+    "typescript": "^5.9.0",
+    "vue-tsc": "^3.1.8"
+  }
+}
