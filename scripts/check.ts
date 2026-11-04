@@ -7,6 +7,7 @@ import {
 } from "../server/utils/workoutInput.ts";
 import { dayStats, e1rm } from "../shared/progress.ts";
 import { formatTarget, summariseSession } from "../shared/routines.ts";
+import { dayKeyInZone, streak } from "../shared/stats.ts";
 
 const valid = {
   exerciseId: "123e4567-e89b-12d3-a456-426614174000",
@@ -145,5 +146,14 @@ assert.equal(summary[1].name, "Row");
 assert.equal(formatTarget(3, 8, "80.00"), "3×8 · 80 kg");
 assert.equal(formatTarget(null, 10, null), "10 reps");
 assert.equal(formatTarget(null, null, null), "");
+
+assert.equal(dayKeyInZone(new Date("2026-11-04T23:30:00.000Z"), "UTC"), "2026-11-04");
+assert.equal(dayKeyInZone(new Date("2026-11-04T23:30:00.000Z"), "Asia/Tokyo"), "2026-11-05");
+
+assert.equal(streak([], "2026-11-04"), 0);
+assert.equal(streak(["2026-11-04", "2026-11-03", "2026-11-01"], "2026-11-04"), 2);
+assert.equal(streak(["2026-11-03", "2026-11-02"], "2026-11-04"), 2);
+assert.equal(streak(["2026-11-01"], "2026-11-04"), 0);
+assert.equal(streak(["2026-11-04", "2026-11-04", "2026-11-03"], "2026-11-04"), 2);
 
 console.log("checks passed");

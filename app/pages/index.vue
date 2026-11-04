@@ -401,6 +401,7 @@ watch(
       <h1>Gym tracker</h1>
       <div class="header-actions">
         <NuxtLink to="/routines" class="linkish">Routines</NuxtLink>
+        <NuxtLink to="/stats" class="linkish">Stats</NuxtLink>
         <button v-if="!activeWorkout" type="button" class="linkish" @click="startWorkout">
           Start workout
         </button>

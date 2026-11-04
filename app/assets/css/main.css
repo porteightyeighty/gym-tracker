@@ -299,6 +299,10 @@ header {
   gap: 0.8rem;
 }
 
+.actions label {
+  margin: 0;
+}
+
 .routine,
 .routine-card {
   background: var(--surface);
