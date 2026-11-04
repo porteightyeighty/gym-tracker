@@ -402,6 +402,7 @@ watch(
       <div class="header-actions">
         <NuxtLink to="/routines" class="linkish">Routines</NuxtLink>
         <NuxtLink to="/stats" class="linkish">Stats</NuxtLink>
+        <a href="/api/export.csv" class="linkish" download>Export CSV</a>
         <button v-if="!activeWorkout" type="button" class="linkish" @click="startWorkout">
           Start workout
         </button>

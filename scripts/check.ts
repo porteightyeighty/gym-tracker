@@ -8,6 +8,7 @@ import {
 import { dayStats, e1rm } from "../shared/progress.ts";
 import { formatTarget, summariseSession } from "../shared/routines.ts";
 import { dayKeyInZone, streak } from "../shared/stats.ts";
+import { toCsv } from "../shared/csv.ts";
 
 const valid = {
   exerciseId: "123e4567-e89b-12d3-a456-426614174000",
@@ -155,5 +156,17 @@ assert.equal(streak(["2026-11-04", "2026-11-03", "2026-11-01"], "2026-11-04"), 2
 assert.equal(streak(["2026-11-03", "2026-11-02"], "2026-11-04"), 2);
 assert.equal(streak(["2026-11-01"], "2026-11-04"), 0);
 assert.equal(streak(["2026-11-04", "2026-11-04", "2026-11-03"], "2026-11-04"), 2);
+
+assert.equal(
+  toCsv(
+    ["a", "b"],
+    [
+      ["x,y", 'he said "hi"'],
+      ["line\nbreak", 2],
+    ],
+  ),
+  'a,b\r\n"x,y","he said ""hi"""\r\n"line\nbreak",2\r\n',
+);
+assert.equal(toCsv(["a"], [[null]]), "a\r\n\r\n");
 
 console.log("checks passed");
