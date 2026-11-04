@@ -147,7 +147,7 @@ onMounted(() => {
   now.value = Date.now();
   clock = setInterval(() => {
     now.value = Date.now();
-  }, 30_000);
+  }, 1_000);
 });
 
 onUnmounted(() => clearInterval(clock));
@@ -162,6 +162,33 @@ const elapsed = computed(() => {
   const hours = Math.floor(minutes / 60);
   return hours ? `${hours}h ${minutes % 60}m` : `${minutes} min`;
 });
+
+const restEndsAt = ref<number | null>(null);
+const restDuration = ref(90);
+
+const restRemaining = computed(() => {
+  if (restEndsAt.value === null || now.value === null) return 0;
+  return Math.max(0, Math.ceil((restEndsAt.value - now.value) / 1000));
+});
+
+function formatRest(seconds: number) {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function startRest() {
+  restEndsAt.value = Date.now() + restDuration.value * 1000;
+}
+
+function adjustRest(delta: number) {
+  restDuration.value = Math.max(15, restDuration.value + delta);
+  if (restEndsAt.value !== null) {
+    restEndsAt.value = Math.max(Date.now(), restEndsAt.value + delta * 1000);
+  }
+}
+
+function dismissRest() {
+  restEndsAt.value = null;
+}
 
 async function startWorkout(routineId?: string) {
   error.value = "";
@@ -182,6 +209,7 @@ async function finishWorkout() {
     method: "PATCH",
     body: { endedAt: new Date().toISOString(), notes: workoutNotes.value },
   });
+  dismissRest();
   await Promise.all([refreshActive(), refreshSets()]);
 }
 
@@ -250,12 +278,14 @@ async function saveSet() {
   };
 
   try {
+    const wasEditing = Boolean(editingId.value);
     if (editingId.value) {
       await requestFetch(`/api/sets/${editingId.value}`, { method: "PATCH", body });
       editingId.value = null;
     } else {
       await requestFetch("/api/sets", { method: "POST", body });
     }
+    if (!wasEditing && !form.isWarmup) startRest();
     form.performedAt = nowLocal();
     await refreshSets();
   } catch (err: any) {
@@ -568,9 +598,14 @@ watch(
         <button type="button" class="linkish" @click="cancelEdit">cancel</button>
       </p>
       <p v-if="error" class="error">{{ error }}</p>
-      <button type="submit" :disabled="busy">
-        {{ busy ? "Saving…" : editingId ? "Save changes" : "Add set" }}
-      </button>
+      <div class="actions">
+        <button type="submit" :disabled="busy">
+          {{ busy ? "Saving…" : editingId ? "Save changes" : "Add set" }}
+        </button>
+        <button type="button" class="linkish" @click="startRest()">
+          Rest {{ restDuration }}s
+        </button>
+      </div>
     </form>
 
     <h2>Recent sets</h2>
@@ -597,5 +632,14 @@ watch(
     <button v-if="hasMore" type="button" :disabled="loadingMore" @click="loadMore">
       {{ loadingMore ? "Loading…" : "Load more" }}
     </button>
+
+    <div v-if="restEndsAt !== null" class="rest-bar" aria-label="Rest timer">
+      <strong class="rest-time">{{ restRemaining ? formatRest(restRemaining) : "Rest done" }}</strong>
+      <div class="actions">
+        <button type="button" class="linkish" @click="adjustRest(-30)">−30s</button>
+        <button type="button" class="linkish" @click="adjustRest(30)">+30s</button>
+        <button type="button" class="linkish" @click="dismissRest">Dismiss</button>
+      </div>
+    </div>
   </main>
 </template>

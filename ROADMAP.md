@@ -30,7 +30,6 @@ This file keeps the conventions those features established and the work delibera
 | Idea | Why not now |
 |------|-------------|
 | kg/lb toggle | Everything is stored and displayed in kg; adding units means a display layer everywhere and a stored unit per user. |
-| Rest timer | Belongs on your phone; a tab that must stay open is worse than the one you already use. |
 | Plate calculator | Niche, and a one-off lookup solves it. |
 | PWA / offline | No requirement yet; the app is single-user and online. |
 | Multi-user (`user_id`) | Deliberate single-user design. Adding it means a migration plus backfill on `exercises`, `sets` and `body_weights`, and every query gains a filter. |
