@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 export default defineEventHandler(async (event) => {
   await requireSession(event);
@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
   const [row] = await db
     .select({ reps: sets.reps, weightKg: sets.weightKg, performedAt: sets.performedAt })
     .from(sets)
-    .where(eq(sets.exerciseId, id))
+    .where(and(eq(sets.exerciseId, id), eq(sets.isWarmup, false)))
     .orderBy(desc(sets.performedAt))
     .limit(1);
 

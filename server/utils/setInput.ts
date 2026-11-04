@@ -1,11 +1,16 @@
 import { createError } from "h3";
 
+const MAX_NOTES = 500;
+
 export interface SetInput {
   exerciseId: string;
   workoutId?: string;
   reps: number;
   weightKg: string;
   performedAt: Date;
+  notes: string | null;
+  rpe: string | null;
+  isWarmup: boolean;
 }
 
 export function isUuid(value: unknown): value is string {
@@ -35,12 +40,41 @@ export function parseSetInput(body: any): SetInput {
     throw createError({ statusCode: 400, statusMessage: "Invalid date" });
   }
 
+  let notes: string | null = null;
+  if (body?.notes !== undefined && body?.notes !== null) {
+    if (typeof body.notes !== "string") {
+      throw createError({ statusCode: 400, statusMessage: "Notes must be text" });
+    }
+    const trimmed = body.notes.trim();
+    if (trimmed.length > MAX_NOTES) {
+      throw createError({ statusCode: 400, statusMessage: `Notes must be at most ${MAX_NOTES} characters` });
+    }
+    notes = trimmed || null;
+  }
+
+  let rpe: string | null = null;
+  if (body?.rpe !== undefined && body?.rpe !== null && body?.rpe !== "") {
+    const value = Number(body.rpe);
+    if (!Number.isFinite(value) || value < 1 || value > 10) {
+      throw createError({ statusCode: 400, statusMessage: "RPE must be between 1 and 10" });
+    }
+    rpe = value.toFixed(1);
+  }
+
+  const isWarmup = body?.isWarmup ?? false;
+  if (typeof isWarmup !== "boolean") {
+    throw createError({ statusCode: 400, statusMessage: "isWarmup must be a boolean" });
+  }
+
   return {
     exerciseId,
     workoutId: isUuid(workoutId) ? workoutId : undefined,
     reps,
     weightKg: weightKg.toFixed(2),
     performedAt,
+    notes,
+    rpe,
+    isWarmup,
   };
 }
 

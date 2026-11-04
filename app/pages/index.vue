@@ -19,6 +19,9 @@ interface SetRow {
   reps: number;
   weightKg: string;
   performedAt: string;
+  notes: string | null;
+  rpe: string | null;
+  isWarmup: boolean;
   exerciseName: string;
   exerciseType: string;
   workoutStartedAt: string | null;
@@ -96,6 +99,9 @@ async function loadMore() {
 const form = reactive({
   weightKg: "",
   reps: "",
+  notes: "",
+  rpe: "",
+  isWarmup: false,
   performedAt: nowLocal(),
 });
 const selectedExercise = ref<Exercise | null>(null);
@@ -191,6 +197,9 @@ watch(selectedExercise, prefillLast);
 function resetForm() {
   form.weightKg = "";
   form.reps = "";
+  form.notes = "";
+  form.rpe = "";
+  form.isWarmup = false;
   form.performedAt = nowLocal();
 }
 
@@ -205,6 +214,9 @@ async function saveSet() {
     exerciseId: selectedExercise.value.id,
     weightKg: Number(form.weightKg),
     reps: Number(form.reps),
+    notes: form.notes.trim() || null,
+    rpe: form.rpe === "" ? null : Number(form.rpe),
+    isWarmup: form.isWarmup,
     performedAt: new Date(form.performedAt).toISOString(),
   };
 
@@ -229,6 +241,9 @@ function startEdit(row: SetRow) {
   selectedExercise.value = { id: row.exerciseId, name: row.exerciseName, type: row.exerciseType };
   form.weightKg = String(Number(row.weightKg));
   form.reps = String(row.reps);
+  form.notes = row.notes ?? "";
+  form.rpe = row.rpe ? String(Number(row.rpe)) : "";
+  form.isWarmup = row.isWarmup;
   form.performedAt = localInput(new Date(row.performedAt));
   error.value = "";
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -413,6 +428,22 @@ const days = computed(() => {
         </div>
       </div>
 
+      <div class="row">
+        <div>
+          <label for="rpe">RPE (optional)</label>
+          <input id="rpe" v-model="form.rpe" type="number" inputmode="decimal" step="0.5" min="1" max="10" />
+        </div>
+        <div>
+          <label for="notes">Notes (optional)</label>
+          <input id="notes" v-model="form.notes" maxlength="500" />
+        </div>
+      </div>
+
+      <label class="check">
+        <input v-model="form.isWarmup" type="checkbox" />
+        Warmup set
+      </label>
+
       <div>
         <label for="performed">When</label>
         <input id="performed" v-model="form.performedAt" type="datetime-local" required />
@@ -435,7 +466,12 @@ const days = computed(() => {
       <p v-if="day.notes" class="muted">{{ day.notes }}</p>
       <div v-for="row in day.items" :key="row.id" class="set">
         <NuxtLink class="name" :to="`/exercises/${row.exerciseId}`">{{ row.exerciseName }}</NuxtLink>
-        <span class="load">{{ Number(row.weightKg) }} kg × {{ row.reps }}</span>
+        <span class="load">
+          {{ Number(row.weightKg) }} kg × {{ row.reps }}
+          <span v-if="row.rpe" class="tag">RPE {{ Number(row.rpe) }}</span>
+        </span>
+        <span v-if="row.isWarmup" class="tag">warmup</span>
+        <span v-if="row.notes" class="note" :title="row.notes">{{ row.notes }}</span>
         <span class="time">
           {{ new Date(row.performedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }}
         </span>

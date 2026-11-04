@@ -13,7 +13,15 @@ export default defineEventHandler(async (event) => {
   }
 
   const rows = await db
-    .select({ id: sets.id, reps: sets.reps, weightKg: sets.weightKg, performedAt: sets.performedAt })
+    .select({
+      id: sets.id,
+      reps: sets.reps,
+      weightKg: sets.weightKg,
+      performedAt: sets.performedAt,
+      notes: sets.notes,
+      rpe: sets.rpe,
+      isWarmup: sets.isWarmup,
+    })
     .from(sets)
     .where(eq(sets.exerciseId, id))
     .orderBy(asc(sets.performedAt))

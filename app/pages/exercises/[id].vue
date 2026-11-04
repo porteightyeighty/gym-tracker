@@ -12,6 +12,9 @@ interface SetRow {
   reps: number;
   weightKg: string;
   performedAt: string;
+  notes: string | null;
+  rpe: string | null;
+  isWarmup: boolean;
 }
 
 const route = useRoute();
@@ -21,23 +24,24 @@ const { data, error } = await useFetch<{ exercise: Exercise; sets: SetRow[] }>(
 
 const rows = computed(() => data.value?.sets ?? []);
 const recent = computed(() => [...rows.value].reverse());
-const days = computed(() => dayStats(rows.value));
+const workingSets = computed(() => rows.value.filter((row) => !row.isWarmup));
+const days = computed(() => dayStats(workingSets.value));
 
 const bestSet = computed(() => {
   let best: SetRow | null = null;
-  for (const row of rows.value) {
+  for (const row of workingSets.value) {
     if (!best || Number(row.weightKg) > Number(best.weightKg)) best = row;
   }
   return best;
 });
 
 const bestE1rm = computed(() =>
-  rows.value.reduce((max, row) => Math.max(max, e1rm(Number(row.weightKg), row.reps)), 0),
+  workingSets.value.reduce((max, row) => Math.max(max, e1rm(Number(row.weightKg), row.reps)), 0),
 );
 const totalVolume = computed(() =>
-  rows.value.reduce((sum, row) => sum + Number(row.weightKg) * row.reps, 0),
+  workingSets.value.reduce((sum, row) => sum + Number(row.weightKg) * row.reps, 0),
 );
-const lastSet = computed(() => rows.value.at(-1) ?? null);
+const lastSet = computed(() => workingSets.value.at(-1) ?? null);
 
 function round(value: number) {
   return Math.round(value * 10) / 10;
@@ -163,9 +167,14 @@ const chart = computed(() => {
                   minute: "2-digit",
                 })
               }}
+              <span v-if="row.isWarmup" class="tag">warmup</span>
+              <div v-if="row.notes" class="muted">{{ row.notes }}</div>
             </td>
             <td class="num">{{ kg(row.weightKg) }}</td>
-            <td class="num">{{ row.reps }}</td>
+            <td class="num">
+              {{ row.reps }}
+              <span v-if="row.rpe" class="tag">RPE {{ Number(row.rpe) }}</span>
+            </td>
             <td class="num">{{ round(e1rm(Number(row.weightKg), row.reps)) }} kg</td>
           </tr>
         </tbody>

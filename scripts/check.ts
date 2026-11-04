@@ -26,12 +26,28 @@ for (const bad of [
   { ...valid, performedAt: "not a date" },
   { ...valid, exerciseId: "nope" },
   { ...valid, workoutId: "nope" },
+  { ...valid, notes: 42 },
+  { ...valid, notes: "x".repeat(501) },
+  { ...valid, rpe: 0 },
+  { ...valid, rpe: 11 },
+  { ...valid, rpe: "hard" },
+  { ...valid, isWarmup: "yes" },
 ]) {
   assert.throws(
     () => parseSetInput(bad),
     (err: any) => err.statusCode === 400,
   );
 }
+
+const parsedMeta = parseSetInput({ ...valid, notes: "  hard  ", rpe: 7.5, isWarmup: true });
+assert.equal(parsedMeta.notes, "hard");
+assert.equal(parsedMeta.rpe, "7.5");
+assert.equal(parsedMeta.isWarmup, true);
+
+assert.equal(parseSetInput(valid).notes, null);
+assert.equal(parseSetInput(valid).rpe, null);
+assert.equal(parseSetInput(valid).isWarmup, false);
+assert.equal(parseSetInput({ ...valid, rpe: "" }).rpe, null);
 
 assert.equal(parseSetInput(valid).workoutId, undefined);
 assert.equal(
