@@ -185,102 +185,103 @@ async function startRoutine(id: string) {
 </script>
 
 <template>
-  <main>
-    <p><NuxtLink to="/">← Back to log</NuxtLink></p>
+  <main class="page">
     <h1>Routines</h1>
 
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="info" class="muted">{{ info }}</p>
 
-    <form @submit.prevent="saveRoutine">
-      <div>
+    <form class="card" @submit.prevent="saveRoutine">
+      <h2>{{ editingId ? "Edit routine" : "New routine" }}</h2>
+
+      <div class="field">
         <label for="routine-name">Name</label>
         <input id="routine-name" v-model="form.name" maxlength="100" required />
       </div>
-      <div>
+      <div class="field">
         <label for="routine-notes">Notes (optional)</label>
         <input id="routine-notes" v-model="form.notes" maxlength="2000" />
       </div>
 
-      <div v-for="(row, index) in rows" :key="index" class="routine-row">
+      <div v-for="(row, index) in rows" :key="index" class="edit-row">
         <select v-model="row.exerciseId" aria-label="Exercise">
           <option v-for="ex in sortedExercises" :key="ex.id" :value="ex.id">{{ ex.name }}</option>
         </select>
-        <input
-          v-model="row.targetSets"
-          type="number"
-          min="1"
-          max="100"
-          placeholder="Sets"
-          aria-label="Target sets"
-        />
-        <input
-          v-model="row.targetReps"
-          type="number"
-          min="1"
-          max="1000"
-          placeholder="Reps"
-          aria-label="Target reps"
-        />
-        <input
-          v-model="row.targetWeightKg"
-          type="number"
-          min="0"
-          max="9999"
-          step="0.5"
-          placeholder="kg"
-          aria-label="Target weight"
-        />
-        <button
-          type="button"
-          class="danger"
-          title="Move up"
-          :disabled="index === 0"
-          @click="moveRow(index, -1)"
-        >
-          ↑
-        </button>
-        <button
-          type="button"
-          class="danger"
-          title="Move down"
-          :disabled="index === rows.length - 1"
-          @click="moveRow(index, 1)"
-        >
-          ↓
-        </button>
-        <button type="button" class="danger" title="Remove" @click="removeRow(index)">✕</button>
+        <div class="tools">
+          <button
+            type="button"
+            class="danger icon"
+            title="Move up"
+            :disabled="index === 0"
+            @click="moveRow(index, -1)"
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            class="danger icon"
+            title="Move down"
+            :disabled="index === rows.length - 1"
+            @click="moveRow(index, 1)"
+          >
+            ↓
+          </button>
+          <button type="button" class="danger icon" title="Remove" @click="removeRow(index)">
+            ✕
+          </button>
+        </div>
+        <div class="targets">
+          <input
+            v-model="row.targetSets"
+            type="number"
+            min="1"
+            max="100"
+            placeholder="Sets"
+            aria-label="Target sets"
+          />
+          <input
+            v-model="row.targetReps"
+            type="number"
+            min="1"
+            max="1000"
+            placeholder="Reps"
+            aria-label="Target reps"
+          />
+          <input
+            v-model="row.targetWeightKg"
+            type="number"
+            min="0"
+            max="9999"
+            step="0.5"
+            placeholder="kg"
+            aria-label="Target weight"
+          />
+        </div>
       </div>
       <p v-if="!rows.length" class="muted">No exercises yet.</p>
 
       <div class="actions">
-        <button type="button" class="linkish" @click="addRow">+ Add exercise</button>
-        <button type="button" class="linkish" :disabled="busy" @click="copyLastSession">
+        <button type="button" class="ghost" @click="addRow">+ Add exercise</button>
+        <button type="button" class="ghost" :disabled="busy" @click="copyLastSession">
           Copy from last session
         </button>
       </div>
 
-      <div class="actions">
-        <button type="submit" :disabled="busy || !rows.length">
-          {{ editingId ? "Save changes" : "Create routine" }}
-        </button>
-        <button v-if="editingId" type="button" class="linkish" @click="resetForm">Cancel</button>
-      </div>
+      <button type="submit" class="primary block" :disabled="busy || !rows.length">
+        {{ editingId ? "Save changes" : "Create routine" }}
+      </button>
+      <button v-if="editingId" type="button" class="ghost" @click="resetForm">Cancel</button>
     </form>
 
     <h2>Saved routines</h2>
     <p v-if="!routines?.items.length" class="muted">No routines yet.</p>
-    <div v-for="routine in routines?.items" :key="routine.id" class="routine-card">
-      <div class="routine-head">
+    <div v-for="routine in routines?.items" :key="routine.id" class="card">
+      <div class="card-head">
         <strong>{{ routine.name }}</strong>
-        <div class="actions">
-          <button type="button" class="linkish" @click="startRoutine(routine.id)">Start</button>
-          <button type="button" class="linkish" @click="startEdit(routine)">Edit</button>
-          <button type="button" class="danger" @click="removeRoutine(routine.id)">Delete</button>
-        </div>
+        <button type="button" class="primary" @click="startRoutine(routine.id)">Start</button>
       </div>
       <p v-if="routine.notes" class="muted">{{ routine.notes }}</p>
-      <ol>
+      <ol class="routine-list">
         <li v-for="item in routine.exercises" :key="item.id">
           {{ item.name }}
           <span v-if="formatTarget(item.targetSets, item.targetReps, item.targetWeightKg)" class="muted">
@@ -288,6 +289,10 @@ async function startRoutine(id: string) {
           </span>
         </li>
       </ol>
+      <div class="actions">
+        <button type="button" class="ghost" @click="startEdit(routine)">Edit</button>
+        <button type="button" class="danger" @click="removeRoutine(routine.id)">Delete</button>
+      </div>
     </div>
   </main>
 </template>

@@ -23,14 +23,14 @@ async function submit() {
 </script>
 
 <template>
-  <main>
-    <h1>Gym tracker</h1>
-    <form @submit.prevent="submit">
-      <div>
+  <main class="login">
+    <form class="card" @submit.prevent="submit">
+      <h1>Gym tracker</h1>
+      <div class="field">
         <label for="email">Email</label>
         <input id="email" v-model="email" type="email" autocomplete="username" required />
       </div>
-      <div>
+      <div class="field">
         <label for="password">Password</label>
         <input
           id="password"
@@ -41,7 +41,9 @@ async function submit() {
         />
       </div>
       <p v-if="error" class="error">{{ error }}</p>
-      <button type="submit" :disabled="busy">{{ busy ? "Signing in…" : "Sign in" }}</button>
+      <button type="submit" class="primary block" :disabled="busy">
+        {{ busy ? "Signing in…" : "Sign in" }}
+      </button>
     </form>
   </main>
 </template>

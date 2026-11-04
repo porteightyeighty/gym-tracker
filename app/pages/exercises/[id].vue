@@ -55,6 +55,16 @@ function shortDate(date: Date | string) {
   return new Date(date).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
+function fullDate(value: string) {
+  return new Date(value).toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 const chart = computed(() => {
   const points = days.value.map((day) => ({ date: day.date, value: day.topWeight }));
   if (!points.length) return null;
@@ -88,18 +98,16 @@ const chart = computed(() => {
 </script>
 
 <template>
-  <main>
-    <p><NuxtLink to="/">← Back to log</NuxtLink></p>
-
+  <main class="page">
     <p v-if="error" class="error">{{ error.statusMessage ?? "Could not load exercise" }}</p>
 
     <template v-else-if="data">
-      <h1>
-        {{ data.exercise.name }}
-        <span class="muted">{{ data.exercise.type }}</span>
-      </h1>
+      <header>
+        <h1>{{ data.exercise.name }}</h1>
+        <p class="micro">{{ data.exercise.type }}</p>
+      </header>
 
-      <div class="stats">
+      <div class="stat-grid">
         <div class="stat">
           <div class="label">Best set</div>
           <div class="value">{{ bestSet ? `${kg(bestSet.weightKg)} × ${bestSet.reps}` : "—" }}</div>
@@ -144,41 +152,24 @@ const chart = computed(() => {
       </svg>
       <p v-else class="muted">No sets yet.</p>
 
-      <h2>All sets</h2>
-      <p v-if="!recent.length" class="muted">No sets yet.</p>
-      <table v-else>
-        <thead>
-          <tr>
-            <th>When</th>
-            <th class="num">Weight</th>
-            <th class="num">Reps</th>
-            <th class="num">e1RM</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in recent" :key="row.id">
-            <td>
-              {{
-                new Date(row.performedAt).toLocaleString(undefined, {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })
-              }}
-              <span v-if="row.isWarmup" class="tag">warmup</span>
-              <div v-if="row.notes" class="muted">{{ row.notes }}</div>
-            </td>
-            <td class="num">{{ kg(row.weightKg) }}</td>
-            <td class="num">
-              {{ row.reps }}
+      <section class="card">
+        <h2>All sets</h2>
+        <p v-if="!recent.length" class="muted">No sets yet.</p>
+        <div v-else class="set-list">
+          <div v-for="row in recent" :key="row.id" class="set-row">
+            <div class="set-line">
+              <span class="set-name">{{ kg(row.weightKg) }} × {{ row.reps }}</span>
               <span v-if="row.rpe" class="tag">RPE {{ Number(row.rpe) }}</span>
-            </td>
-            <td class="num">{{ round(e1rm(Number(row.weightKg), row.reps)) }} kg</td>
-          </tr>
-        </tbody>
-      </table>
+              <span v-if="row.isWarmup" class="tag">warmup</span>
+              <span class="set-load">e1RM {{ round(e1rm(Number(row.weightKg), row.reps)) }} kg</span>
+            </div>
+            <div class="set-sub">
+              <span>{{ fullDate(row.performedAt) }}</span>
+              <span v-if="row.notes" class="set-note" :title="row.notes">{{ row.notes }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
     </template>
   </main>
 </template>

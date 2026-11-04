@@ -68,8 +68,6 @@ interface LastSet {
   performedAt: string;
 }
 
-const PAGE_SIZE = 20;
-
 function localInput(date: Date) {
   const d = new Date(date);
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -87,35 +85,18 @@ const { data: activeWorkout, refresh: refreshActive } = await useFetch<Workout |
   "/api/workouts/active",
 );
 const { data: routines } = await useFetch<{ items: Routine[] }>("/api/routines");
-const { data: firstPage, refresh: refreshSets } = await useAsyncData("sets", () =>
-  requestFetch<{ items: SetRow[]; hasMore: boolean }>(`/api/sets?limit=${PAGE_SIZE}`),
+const { data: setPage, refresh: refreshSets } = await useAsyncData("session-sets", () =>
+  requestFetch<{ items: SetRow[]; hasMore: boolean }>("/api/sets?limit=50"),
 );
 
 const rows = ref<SetRow[]>([]);
-const hasMore = ref(false);
-const loadingMore = ref(false);
-
 watch(
-  firstPage,
+  setPage,
   (page) => {
     rows.value = page?.items ?? [];
-    hasMore.value = page?.hasMore ?? false;
   },
   { immediate: true },
 );
-
-async function loadMore() {
-  loadingMore.value = true;
-  try {
-    const page = await requestFetch<{ items: SetRow[]; hasMore: boolean }>(
-      `/api/sets?limit=${PAGE_SIZE}&offset=${rows.value.length}`,
-    );
-    rows.value.push(...page.items);
-    hasMore.value = page.hasMore;
-  } finally {
-    loadingMore.value = false;
-  }
-}
 
 const form = reactive({
   weightKg: "",
@@ -130,6 +111,8 @@ const editingId = ref<string | null>(null);
 const lastSet = ref<LastSet | null>(null);
 const error = ref("");
 const busy = ref(false);
+const detailsOpen = ref(false);
+const pickerOpen = ref(false);
 
 const workoutNotes = ref("");
 const now = ref<number | null>(null);
@@ -143,11 +126,21 @@ watch(
   { immediate: true },
 );
 
+watch(editingId, (id) => {
+  if (id) detailsOpen.value = true;
+});
+
+const pendingEdit = useState<SetRow | null>("edit-set", () => null);
+
 onMounted(() => {
   now.value = Date.now();
   clock = setInterval(() => {
     now.value = Date.now();
   }, 1_000);
+  if (pendingEdit.value) {
+    startEdit(pendingEdit.value);
+    pendingEdit.value = null;
+  }
 });
 
 onUnmounted(() => clearInterval(clock));
@@ -169,6 +162,10 @@ const restDuration = ref(90);
 const restRemaining = computed(() => {
   if (restEndsAt.value === null || now.value === null) return 0;
   return Math.max(0, Math.ceil((restEndsAt.value - now.value) / 1000));
+});
+
+watch(restRemaining, (value, previous) => {
+  if (value === 0 && previous > 0) navigator.vibrate?.(200);
 });
 
 function formatRest(seconds: number) {
@@ -205,6 +202,7 @@ async function startWorkout(routineId?: string) {
 
 async function finishWorkout() {
   if (!activeWorkout.value) return;
+  if (!window.confirm("Finish this workout?")) return;
   await requestFetch(`/api/workouts/${activeWorkout.value.id}`, {
     method: "PATCH",
     body: { endedAt: new Date().toISOString(), notes: workoutNotes.value },
@@ -221,7 +219,9 @@ const exerciseFilter = ref("");
 const filteredExercises = computed(() => {
   const list = exercises.value ?? [];
   const query = exerciseFilter.value.trim().toLowerCase();
-  return query ? list.filter((ex) => ex.name.toLowerCase().includes(query) || ex.type.includes(query)) : list;
+  return query
+    ? list.filter((ex) => ex.name.toLowerCase().includes(query) || ex.type.includes(query))
+    : list;
 });
 const exerciseGroups = computed(() => {
   const groups: { type: string; items: Exercise[] }[] = [];
@@ -258,6 +258,16 @@ function resetForm() {
   form.rpe = "";
   form.isWarmup = false;
   form.performedAt = nowLocal();
+}
+
+function stepWeight(delta: number) {
+  const current = Number(form.weightKg) || 0;
+  form.weightKg = String(Math.max(0, Math.round((current + delta) * 2) / 2));
+}
+
+function stepReps(delta: number) {
+  const current = Number(form.reps) || 0;
+  form.reps = String(Math.max(1, Math.round(current + delta)));
 }
 
 async function saveSet() {
@@ -336,57 +346,18 @@ async function removeSet(id: string) {
   await refreshSets();
 }
 
+async function deleteEditing() {
+  if (editingId.value) await removeSet(editingId.value);
+}
+
 async function signOut() {
   await authClient.signOut();
   await navigateTo("/login");
 }
 
-function dayLabel(date: Date) {
-  const today = new Date();
-  const yesterday = new Date();
-  yesterday.setDate(today.getDate() - 1);
-  const key = date.toDateString();
-  if (key === today.toDateString()) return "Today";
-  if (key === yesterday.toDateString()) return "Yesterday";
-  return date.toLocaleDateString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
-}
-
-function groupLabel(row: SetRow) {
-  if (!row.workoutId || !row.workoutStartedAt) return dayLabel(new Date(row.performedAt));
-  const start = new Date(row.workoutStartedAt);
-  const startTime = start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const prefix = `${dayLabel(start)} · ${startTime}`;
-  if (!row.workoutEndedAt) return `${prefix} · in progress`;
-  const endTime = new Date(row.workoutEndedAt).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  return `${prefix}–${endTime}`;
-}
-
-const days = computed(() => {
-  const groups: { key: string; label: string; notes: string | null; items: SetRow[] }[] = [];
-  for (const row of rows.value ?? []) {
-    const date = new Date(row.performedAt);
-    const key = row.workoutId ? `workout:${row.workoutId}` : `day:${date.toDateString()}`;
-    let group = groups.find((g) => g.key === key);
-    if (!group) {
-      group = {
-        key,
-        label: groupLabel(row),
-        notes: row.workoutId ? row.workoutNotes : null,
-        items: [],
-      };
-      groups.push(group);
-    }
-    group.items.push(row);
-  }
-  return groups;
-});
+const sessionRows = computed(() =>
+  rows.value.filter((row) => row.workoutId === activeWorkout.value?.id),
+);
 
 const routine = computed(() => {
   const id = activeWorkout.value?.routineId;
@@ -416,6 +387,10 @@ const routineItems = computed(() => {
   });
 });
 
+const currentTarget = computed(
+  () => routineItems.value.find((item) => item.exerciseId === selectedExercise.value?.id)?.target ?? "",
+);
+
 function pickRoutineExercise(item: RoutineExercise) {
   selectedExercise.value = { id: item.exerciseId, name: item.name, type: item.type };
 }
@@ -431,83 +406,98 @@ watch(
   },
   { immediate: true },
 );
+
+function timeOf(value: string) {
+  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 </script>
 
 <template>
-  <main>
-    <header>
-      <h1>Gym tracker</h1>
-      <div class="header-actions">
-        <NuxtLink to="/routines" class="linkish">Routines</NuxtLink>
-        <NuxtLink to="/stats" class="linkish">Stats</NuxtLink>
-        <a href="/api/export.csv" class="linkish" download>Export CSV</a>
-        <template v-if="activeWorkout">
-          <input
-            v-model="workoutNotes"
-            class="workout-notes"
-            placeholder="Workout notes"
-            aria-label="Workout notes"
-          />
-          <button type="button" class="linkish" @click="finishWorkout">
-            Finish workout<template v-if="elapsed"> · {{ elapsed }}</template>
-          </button>
-        </template>
-        <button type="button" class="linkish" @click="signOut">Sign out</button>
-      </div>
-    </header>
-
-    <section v-if="!activeWorkout" class="hero">
-      <div>
-        <h2>Ready to train?</h2>
-        <p class="muted">Start an empty workout, or pick a routine below.</p>
+  <main class="page" :class="{ 'has-rest': restEndsAt !== null }">
+    <template v-if="!activeWorkout && !editingId">
+      <header class="hero">
+        <h1>Ready to train?</h1>
+        <p class="muted">Start an empty workout, or jump into a routine.</p>
         <p v-if="error" class="error">{{ error }}</p>
-      </div>
-      <button type="button" class="primary" @click="startWorkout()">Start workout</button>
-    </section>
+        <button type="button" class="primary block" @click="startWorkout()">Start workout</button>
+      </header>
 
-    <section v-if="!activeWorkout" class="routine-picker">
-      <div v-for="routine in routines?.items" :key="routine.id" class="routine-card">
-        <div class="routine-head">
-          <strong>{{ routine.name }}</strong>
-          <div class="actions">
-            <span class="muted">{{ routine.exercises.length }} exercises</span>
-            <button type="button" class="primary" @click="startWorkout(routine.id)">Start</button>
+      <template v-if="routines?.items.length">
+        <div v-for="item in routines.items" :key="item.id" class="card">
+          <div class="card-head">
+            <div>
+              <strong>{{ item.name }}</strong>
+              <p class="muted">{{ item.exercises.length }} exercises</p>
+            </div>
+            <button type="button" class="primary" @click="startWorkout(item.id)">Start</button>
           </div>
+          <p v-if="item.notes" class="muted">{{ item.notes }}</p>
         </div>
-        <p v-if="routine.notes" class="muted">{{ routine.notes }}</p>
-      </div>
-      <p v-if="!routines?.items.length" class="muted">
+      </template>
+      <p v-else class="muted">
         No routines yet — <NuxtLink to="/routines">create one</NuxtLink>.
       </p>
-      <p v-else class="muted"><NuxtLink to="/routines">Manage routines →</NuxtLink></p>
-    </section>
 
-    <section v-if="routine" class="routine">
-      <div class="routine-head">
-        <strong>{{ routine.name }}</strong>
-        <span class="muted">Routine</span>
+      <div class="actions">
+        <a href="/api/export.csv" class="ghost" download>Export CSV</a>
+        <button type="button" class="ghost muted" @click="signOut">Sign out</button>
       </div>
-      <ol>
-        <li v-for="item in routineItems" :key="item.id" :class="{ done: item.done, next: item.next }">
-          <button type="button" class="linkish" @click="pickRoutineExercise(item)">
-            {{ item.done ? "✓" : item.next ? "→" : "·" }} {{ item.name }}
-          </button>
-          <span v-if="item.target" class="muted">{{ item.target }}</span>
-        </li>
-      </ol>
-    </section>
+    </template>
 
-    <form v-if="activeWorkout || editingId" @submit.prevent="saveSet">
-      <div>
-        <label for="exercise">Exercise</label>
-        <ComboboxRoot v-model="selectedExercise" :ignore-filter="true" class="combobox">
+    <template v-else>
+      <header v-if="!activeWorkout">
+        <h1>Edit set</h1>
+      </header>
+
+      <header v-if="activeWorkout" class="session-head">
+        <div class="grow">
+          <h1>{{ routine?.name ?? "Freestyle" }}</h1>
+          <p class="micro">Session</p>
+        </div>
+        <span v-if="elapsed" class="timer">{{ elapsed }}</span>
+        <button type="button" class="ghost" @click="finishWorkout">Finish</button>
+      </header>
+
+      <div v-if="routineItems.length" class="chips">
+        <button
+          v-for="item in routineItems"
+          :key="item.id"
+          type="button"
+          class="chip"
+          :class="{
+            done: item.done,
+            next: item.next,
+            active: selectedExercise?.id === item.exerciseId,
+          }"
+          @click="pickRoutineExercise(item)"
+        >
+          {{ item.done ? "✓" : item.next ? "→" : "·" }} {{ item.name }}
+        </button>
+      </div>
+
+      <form class="card exercise-card" @submit.prevent="saveSet">
+        <ComboboxRoot v-model="selectedExercise" v-model:open="pickerOpen" :ignore-filter="true">
+          <div class="card-head">
+            <div class="grow">
+              <div class="exercise-name">
+                {{ selectedExercise?.name ?? "Choose exercise" }}
+              </div>
+              <p v-if="currentTarget" class="muted">Target {{ currentTarget }}</p>
+              <p v-else-if="selectedExercise" class="muted">{{ selectedExercise.type }}</p>
+            </div>
+            <button type="button" class="ghost" @click="pickerOpen = !pickerOpen">
+              {{ pickerOpen ? "Close" : "Change" }}
+            </button>
+          </div>
+
           <ComboboxInput
-            id="exercise"
+            v-if="pickerOpen"
             v-model="exerciseFilter"
             placeholder="Search exercises"
             autocomplete="off"
+            autofocus
           />
-          <ComboboxContent class="combobox-list">
+          <ComboboxContent v-if="pickerOpen" class="combobox-list">
             <ComboboxViewport>
               <ComboboxGroup v-for="group in exerciseGroups" :key="group.type">
                 <ComboboxLabel class="combobox-group">{{ group.type }}</ComboboxLabel>
@@ -518,127 +508,165 @@ watch(
               <ComboboxEmpty class="combobox-empty">No matches</ComboboxEmpty>
             </ComboboxViewport>
           </ComboboxContent>
-        </ComboboxRoot>
-        <p v-if="selectedExercise" class="muted">
-          {{ editingId ? "Editing" : "Selected" }}: {{ selectedExercise.name }}
-          <template v-if="lastSet && !editingId">
-            · Last: {{ Number(lastSet.weightKg) }} kg × {{ lastSet.reps }} ·
-            {{ new Date(lastSet.performedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" }) }}
+
+          <template v-if="pickerOpen">
+            <button
+              type="button"
+              class="ghost"
+              @click="showNewExercise = !showNewExercise"
+            >
+              {{ showNewExercise ? "Cancel" : "+ New exercise" }}
+            </button>
+            <div v-if="showNewExercise" class="details-body">
+              <div class="row">
+                <div class="field">
+                  <label for="new-name">Name</label>
+                  <input id="new-name" v-model="newExercise.name" required />
+                </div>
+                <div class="field">
+                  <label for="new-type">Equipment</label>
+                  <select id="new-type" v-model="newExercise.type">
+                    <option v-for="type in EQUIPMENT" :key="type" :value="type">{{ type }}</option>
+                  </select>
+                </div>
+              </div>
+              <p v-if="exerciseError" class="error">{{ exerciseError }}</p>
+              <button type="button" @click="addExercise">Add exercise</button>
+            </div>
           </template>
+        </ComboboxRoot>
+
+        <p v-if="lastSet && !editingId" class="muted">
+          Last: {{ Number(lastSet.weightKg) }} kg × {{ lastSet.reps }}
         </p>
-        <button
-          type="button"
-          class="linkish"
-          style="margin-top: 0.4rem"
-          @click="showNewExercise = !showNewExercise"
+
+        <div class="big-inputs">
+          <div class="big-field">
+            <label for="weight">Weight kg</label>
+            <input
+              id="weight"
+              v-model="form.weightKg"
+              type="number"
+              inputmode="decimal"
+              step="0.5"
+              min="0"
+              required
+            />
+            <div class="steppers">
+              <button type="button" aria-label="Decrease weight" @click="stepWeight(-2.5)">−</button>
+              <button type="button" aria-label="Increase weight" @click="stepWeight(2.5)">+</button>
+            </div>
+          </div>
+          <div class="big-field">
+            <label for="reps">Reps</label>
+            <input
+              id="reps"
+              v-model="form.reps"
+              type="number"
+              inputmode="numeric"
+              step="1"
+              min="1"
+              required
+            />
+            <div class="steppers">
+              <button type="button" aria-label="Decrease reps" @click="stepReps(-1)">−</button>
+              <button type="button" aria-label="Increase reps" @click="stepReps(1)">+</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-head">
+          <label class="toggle">
+            <input v-model="form.isWarmup" type="checkbox" />
+            Warmup
+          </label>
+          <button type="button" class="ghost" @click="startRest()">
+            Rest {{ restDuration }}s
+          </button>
+        </div>
+
+        <p v-if="error" class="error">{{ error }}</p>
+        <button type="submit" class="primary block log-btn" :disabled="busy">
+          {{ busy ? "Saving…" : editingId ? "Save changes" : "Log set" }}
+        </button>
+
+        <details
+          :open="detailsOpen"
+          @toggle="detailsOpen = ($event.target as HTMLDetailsElement).open"
         >
-          {{ showNewExercise ? "Cancel" : "+ New exercise" }}
-        </button>
-      </div>
-
-      <div v-if="showNewExercise">
-        <div class="row">
-          <div>
-            <label for="new-name">Name</label>
-            <input id="new-name" v-model="newExercise.name" required />
+          <summary>Details</summary>
+          <div class="details-body">
+            <div class="row">
+              <div class="field">
+                <label for="rpe">RPE</label>
+                <input
+                  id="rpe"
+                  v-model="form.rpe"
+                  type="number"
+                  inputmode="decimal"
+                  step="0.5"
+                  min="1"
+                  max="10"
+                />
+              </div>
+              <div class="field">
+                <label for="notes">Notes</label>
+                <input id="notes" v-model="form.notes" maxlength="500" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="performed">When</label>
+              <input id="performed" v-model="form.performedAt" type="datetime-local" required />
+            </div>
+            <div v-if="editingId" class="actions">
+              <span class="muted">Editing set</span>
+              <button type="button" class="ghost" @click="cancelEdit">Cancel</button>
+              <button type="button" class="danger" @click="deleteEditing">Delete</button>
+            </div>
           </div>
-          <div>
-            <label for="new-type">Equipment</label>
-            <select id="new-type" v-model="newExercise.type">
-              <option v-for="type in EQUIPMENT" :key="type" :value="type">{{ type }}</option>
-            </select>
+        </details>
+      </form>
+
+      <section v-if="sessionRows.length" class="card">
+        <h2>This session · {{ sessionRows.length }}</h2>
+        <div class="set-list">
+          <div v-for="row in sessionRows" :key="row.id" class="set-row">
+            <div class="set-line">
+              <span class="set-name">{{ row.exerciseName }}</span>
+              <span class="set-load">{{ Number(row.weightKg) }} kg × {{ row.reps }}</span>
+            </div>
+            <div class="set-sub">
+              <span>{{ timeOf(row.performedAt) }}</span>
+              <span v-if="row.rpe" class="tag">RPE {{ Number(row.rpe) }}</span>
+              <span v-if="row.isWarmup" class="tag">warmup</span>
+              <span v-if="row.notes" class="set-note" :title="row.notes">{{ row.notes }}</span>
+            </div>
+            <div class="set-actions">
+              <button class="danger" title="Edit set" @click="startEdit(row)">✎</button>
+              <button class="danger" title="Delete set" @click="removeSet(row.id)">✕</button>
+            </div>
           </div>
         </div>
-        <p v-if="exerciseError" class="error">{{ exerciseError }}</p>
-        <button type="button" style="margin-top: 0.6rem" @click="addExercise">Add exercise</button>
-      </div>
+      </section>
 
-      <div class="row">
-        <div>
-          <label for="weight">Weight (kg)</label>
-          <input
-            id="weight"
-            v-model="form.weightKg"
-            type="number"
-            inputmode="decimal"
-            step="0.5"
-            min="0"
-            required
-          />
+      <details v-if="activeWorkout">
+        <summary>Workout notes</summary>
+        <div class="details-body">
+          <input v-model="workoutNotes" maxlength="2000" placeholder="How did it go?" />
         </div>
-        <div>
-          <label for="reps">Reps</label>
-          <input id="reps" v-model="form.reps" type="number" inputmode="numeric" step="1" min="1" required />
-        </div>
-      </div>
+      </details>
+    </template>
 
-      <div class="row">
-        <div>
-          <label for="rpe">RPE (optional)</label>
-          <input id="rpe" v-model="form.rpe" type="number" inputmode="decimal" step="0.5" min="1" max="10" />
-        </div>
-        <div>
-          <label for="notes">Notes (optional)</label>
-          <input id="notes" v-model="form.notes" maxlength="500" />
-        </div>
-      </div>
-
-      <label class="check">
-        <input v-model="form.isWarmup" type="checkbox" />
-        Warmup set
-      </label>
-
-      <div>
-        <label for="performed">When</label>
-        <input id="performed" v-model="form.performedAt" type="datetime-local" required />
-      </div>
-
-      <p v-if="editingId" class="edit-banner">
-        Editing set —
-        <button type="button" class="linkish" @click="cancelEdit">cancel</button>
-      </p>
-      <p v-if="error" class="error">{{ error }}</p>
+    <div v-if="restEndsAt !== null" class="restbar" aria-label="Rest timer">
+      <strong class="time" :class="{ done: restRemaining === 0 }">
+        {{ restRemaining ? formatRest(restRemaining) : "Rest done" }}
+      </strong>
       <div class="actions">
-        <button type="submit" :disabled="busy">
-          {{ busy ? "Saving…" : editingId ? "Save changes" : "Add set" }}
+        <button type="button" class="ghost" @click="adjustRest(-30)">−30</button>
+        <button type="button" class="ghost" @click="adjustRest(30)">+30</button>
+        <button type="button" class="danger" aria-label="Dismiss rest timer" @click="dismissRest">
+          ✕
         </button>
-        <button type="button" class="linkish" @click="startRest()">
-          Rest {{ restDuration }}s
-        </button>
-      </div>
-    </form>
-
-    <h2>Recent sets</h2>
-    <p v-if="!days.length" class="muted">No sets yet.</p>
-    <div v-for="day in days" :key="day.key" class="day">
-      <h3>{{ day.label }}</h3>
-      <p v-if="day.notes" class="muted">{{ day.notes }}</p>
-      <div v-for="row in day.items" :key="row.id" class="set">
-        <NuxtLink class="name" :to="`/exercises/${row.exerciseId}`">{{ row.exerciseName }}</NuxtLink>
-        <span class="load">
-          {{ Number(row.weightKg) }} kg × {{ row.reps }}
-          <span v-if="row.rpe" class="tag">RPE {{ Number(row.rpe) }}</span>
-        </span>
-        <span v-if="row.isWarmup" class="tag">warmup</span>
-        <span v-if="row.notes" class="note" :title="row.notes">{{ row.notes }}</span>
-        <span class="time">
-          {{ new Date(row.performedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }}
-        </span>
-        <button class="danger" title="Edit set" @click="startEdit(row)">✎</button>
-        <button class="danger" title="Delete set" @click="removeSet(row.id)">✕</button>
-      </div>
-    </div>
-
-    <button v-if="hasMore" type="button" :disabled="loadingMore" @click="loadMore">
-      {{ loadingMore ? "Loading…" : "Load more" }}
-    </button>
-
-    <div v-if="restEndsAt !== null" class="rest-bar" aria-label="Rest timer">
-      <strong class="rest-time">{{ restRemaining ? formatRest(restRemaining) : "Rest done" }}</strong>
-      <div class="actions">
-        <button type="button" class="linkish" @click="adjustRest(-30)">−30s</button>
-        <button type="button" class="linkish" @click="adjustRest(30)">+30s</button>
-        <button type="button" class="linkish" @click="dismissRest">Dismiss</button>
       </div>
     </div>
   </main>

@@ -171,23 +171,25 @@ function shortDate(value: string | Date) {
 </script>
 
 <template>
-  <main>
-    <p><NuxtLink to="/">← Back to log</NuxtLink></p>
+  <main class="page">
     <h1>Stats</h1>
 
-    <div class="actions">
-      <label for="weeks">Range</label>
-      <select id="weeks" v-model.number="weeks">
-        <option :value="4">4 weeks</option>
-        <option :value="12">12 weeks</option>
-        <option :value="26">26 weeks</option>
-      </select>
+    <div class="segmented" role="group" aria-label="Range">
+      <button
+        v-for="option in [4, 12, 26]"
+        :key="option"
+        type="button"
+        :class="{ active: weeks === option }"
+        @click="weeks = option"
+      >
+        {{ option }} weeks
+      </button>
     </div>
 
     <p v-if="error" class="error">{{ error.statusMessage ?? "Could not load stats" }}</p>
 
     <template v-else-if="data">
-      <div class="stats">
+      <div class="stat-grid">
         <div class="stat">
           <div class="label">Sets</div>
           <div class="value">{{ data.totals.sets }}</div>
@@ -257,9 +259,9 @@ function shortDate(value: string | Date) {
     </template>
 
     <h2>Body weight</h2>
-    <form @submit.prevent="saveWeight">
+    <form class="card" @submit.prevent="saveWeight">
       <div class="row">
-        <div>
+        <div class="field">
           <label for="weight-kg">Weight (kg)</label>
           <input
             id="weight-kg"
@@ -272,19 +274,19 @@ function shortDate(value: string | Date) {
             required
           />
         </div>
-        <div>
+        <div class="field">
           <label for="weight-at">When</label>
           <input id="weight-at" v-model="weightForm.measuredAt" type="datetime-local" required />
         </div>
       </div>
       <p v-if="weightError" class="error">{{ weightError }}</p>
-      <button type="submit" :disabled="weightBusy">
+      <button type="submit" class="primary block" :disabled="weightBusy">
         {{ weightBusy ? "Saving…" : "Log weight" }}
       </button>
     </form>
 
     <template v-if="latestWeight">
-      <div class="stats" style="margin-top: 1rem">
+      <div class="stat-grid">
         <div class="stat">
           <div class="label">Latest</div>
           <div class="value">{{ Number(latestWeight.weightKg) }} kg</div>
