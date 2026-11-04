@@ -245,6 +245,20 @@ header {
   gap: 1rem;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.workout-notes {
+  width: 10rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+}
+
 .combobox input {
   width: 100%;
 }

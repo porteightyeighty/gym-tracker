@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { parseSetInput } from "../server/utils/setInput.ts";
+import {
+  parseStartWorkoutInput,
+  parseUpdateWorkoutInput,
+} from "../server/utils/workoutInput.ts";
 import { dayStats, e1rm } from "../shared/progress.ts";
 
 const valid = {
@@ -21,11 +25,40 @@ for (const bad of [
   { ...valid, weightKg: "heavy" },
   { ...valid, performedAt: "not a date" },
   { ...valid, exerciseId: "nope" },
+  { ...valid, workoutId: "nope" },
 ]) {
   assert.throws(
     () => parseSetInput(bad),
     (err: any) => err.statusCode === 400,
   );
+}
+
+assert.equal(parseSetInput(valid).workoutId, undefined);
+assert.equal(
+  parseSetInput({ ...valid, workoutId: "123e4567-e89b-12d3-a456-426614174001" }).workoutId,
+  "123e4567-e89b-12d3-a456-426614174001",
+);
+
+const started = parseStartWorkoutInput({ notes: "  legs  " });
+assert.ok(started.startedAt instanceof Date);
+assert.equal(started.notes, "legs");
+
+const startedNow = parseStartWorkoutInput(undefined);
+assert.ok(Date.now() - startedNow.startedAt.getTime() < 5000);
+assert.equal(startedNow.notes, null);
+
+assert.deepEqual(parseUpdateWorkoutInput({}), {});
+const update = parseUpdateWorkoutInput({ endedAt: "2026-11-04T12:00:00.000Z", notes: null });
+assert.ok(update.endedAt instanceof Date);
+assert.equal(update.notes, null);
+
+for (const bad of [
+  () => parseStartWorkoutInput({ startedAt: "not a date" }),
+  () => parseStartWorkoutInput({ notes: "x".repeat(2001) }),
+  () => parseUpdateWorkoutInput({ endedAt: "not a date" }),
+  () => parseUpdateWorkoutInput({ notes: 42 }),
+]) {
+  assert.throws(bad, (err: any) => err.statusCode === 400);
 }
 
 assert.equal(e1rm(100, 1), 100);

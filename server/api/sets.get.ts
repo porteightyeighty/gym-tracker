@@ -10,14 +10,19 @@ export default defineEventHandler(async (event) => {
     .select({
       id: sets.id,
       exerciseId: sets.exerciseId,
+      workoutId: sets.workoutId,
       reps: sets.reps,
       weightKg: sets.weightKg,
       performedAt: sets.performedAt,
       exerciseName: exercises.name,
       exerciseType: exercises.type,
+      workoutStartedAt: workouts.startedAt,
+      workoutEndedAt: workouts.endedAt,
+      workoutNotes: workouts.notes,
     })
     .from(sets)
     .innerJoin(exercises, eq(sets.exerciseId, exercises.id))
+    .leftJoin(workouts, eq(sets.workoutId, workouts.id))
     .orderBy(desc(sets.performedAt), desc(sets.createdAt))
     .limit(limit + 1)
     .offset(offset);

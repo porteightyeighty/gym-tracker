@@ -66,6 +66,18 @@ export const exercises = pgTable("exercises", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const workouts = pgTable(
+  "workouts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("workouts_started_at_idx").on(t.startedAt)],
+);
+
 export const sets = pgTable(
   "sets",
   {
@@ -73,10 +85,11 @@ export const sets = pgTable(
     exerciseId: uuid("exercise_id")
       .notNull()
       .references(() => exercises.id, { onDelete: "cascade" }),
+    workoutId: uuid("workout_id").references(() => workouts.id, { onDelete: "set null" }),
     reps: integer("reps").notNull(),
     weightKg: numeric("weight_kg", { precision: 6, scale: 2 }).notNull(),
     performedAt: timestamp("performed_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("sets_performed_at_idx").on(t.performedAt)],
+  (t) => [index("sets_performed_at_idx").on(t.performedAt), index("sets_workout_id_idx").on(t.workoutId)],
 );

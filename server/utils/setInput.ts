@@ -2,6 +2,7 @@ import { createError } from "h3";
 
 export interface SetInput {
   exerciseId: string;
+  workoutId?: string;
   reps: number;
   weightKg: string;
   performedAt: Date;
@@ -13,12 +14,16 @@ export function isUuid(value: unknown): value is string {
 
 export function parseSetInput(body: any): SetInput {
   const exerciseId = typeof body?.exerciseId === "string" ? body.exerciseId : "";
+  const workoutId = body?.workoutId;
   const reps = Number(body?.reps);
   const weightKg = Number(body?.weightKg);
   const performedAt = new Date(body?.performedAt);
 
   if (!isUuid(exerciseId)) {
     throw createError({ statusCode: 400, statusMessage: "Invalid exercise" });
+  }
+  if (workoutId !== undefined && workoutId !== null && !isUuid(workoutId)) {
+    throw createError({ statusCode: 400, statusMessage: "Invalid workout" });
   }
   if (!Number.isInteger(reps) || reps < 1 || reps > 1000) {
     throw createError({ statusCode: 400, statusMessage: "Reps must be a positive integer" });
@@ -30,7 +35,13 @@ export function parseSetInput(body: any): SetInput {
     throw createError({ statusCode: 400, statusMessage: "Invalid date" });
   }
 
-  return { exerciseId, reps, weightKg: weightKg.toFixed(2), performedAt };
+  return {
+    exerciseId,
+    workoutId: isUuid(workoutId) ? workoutId : undefined,
+    reps,
+    weightKg: weightKg.toFixed(2),
+    performedAt,
+  };
 }
 
 export function rethrowSetError(err: unknown): never {
