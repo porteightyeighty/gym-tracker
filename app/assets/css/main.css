@@ -82,7 +82,8 @@ button {
   cursor: pointer;
 }
 
-button[type="submit"] {
+button[type="submit"],
+.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
@@ -290,6 +291,33 @@ header {
   width: 10rem;
   padding: 0.3rem 0.5rem;
   font-size: 0.85rem;
+}
+
+.hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.hero h2 {
+  margin: 0 0 0.25rem;
+  color: var(--text);
+  font-size: 1.1rem;
+}
+
+.hero p {
+  margin: 0;
+}
+
+.hero .primary {
+  padding: 0.7rem 1.2rem;
 }
 
 .actions {

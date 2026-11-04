@@ -163,9 +163,17 @@ const elapsed = computed(() => {
   return hours ? `${hours}h ${minutes % 60}m` : `${minutes} min`;
 });
 
-async function startWorkout() {
-  await requestFetch("/api/workouts", { method: "POST" });
-  await refreshActive();
+async function startWorkout(routineId?: string) {
+  error.value = "";
+  try {
+    await requestFetch("/api/workouts", {
+      method: "POST",
+      body: { routineId: routineId ?? null },
+    });
+    await refreshActive();
+  } catch (err: any) {
+    error.value = err?.data?.statusMessage ?? "Could not start workout";
+  }
 }
 
 async function finishWorkout() {
@@ -403,10 +411,7 @@ watch(
         <NuxtLink to="/routines" class="linkish">Routines</NuxtLink>
         <NuxtLink to="/stats" class="linkish">Stats</NuxtLink>
         <a href="/api/export.csv" class="linkish" download>Export CSV</a>
-        <button v-if="!activeWorkout" type="button" class="linkish" @click="startWorkout">
-          Start workout
-        </button>
-        <template v-else>
+        <template v-if="activeWorkout">
           <input
             v-model="workoutNotes"
             class="workout-notes"
@@ -420,6 +425,32 @@ watch(
         <button type="button" class="linkish" @click="signOut">Sign out</button>
       </div>
     </header>
+
+    <section v-if="!activeWorkout" class="hero">
+      <div>
+        <h2>Ready to train?</h2>
+        <p class="muted">Start an empty workout, or pick a routine below.</p>
+        <p v-if="error" class="error">{{ error }}</p>
+      </div>
+      <button type="button" class="primary" @click="startWorkout()">Start workout</button>
+    </section>
+
+    <section v-if="!activeWorkout" class="routine-picker">
+      <div v-for="routine in routines?.items" :key="routine.id" class="routine-card">
+        <div class="routine-head">
+          <strong>{{ routine.name }}</strong>
+          <div class="actions">
+            <span class="muted">{{ routine.exercises.length }} exercises</span>
+            <button type="button" class="primary" @click="startWorkout(routine.id)">Start</button>
+          </div>
+        </div>
+        <p v-if="routine.notes" class="muted">{{ routine.notes }}</p>
+      </div>
+      <p v-if="!routines?.items.length" class="muted">
+        No routines yet — <NuxtLink to="/routines">create one</NuxtLink>.
+      </p>
+      <p v-else class="muted"><NuxtLink to="/routines">Manage routines →</NuxtLink></p>
+    </section>
 
     <section v-if="routine" class="routine">
       <div class="routine-head">
@@ -436,7 +467,7 @@ watch(
       </ol>
     </section>
 
-    <form @submit.prevent="saveSet">
+    <form v-if="activeWorkout || editingId" @submit.prevent="saveSet">
       <div>
         <label for="exercise">Exercise</label>
         <ComboboxRoot v-model="selectedExercise" :ignore-filter="true" class="combobox">
