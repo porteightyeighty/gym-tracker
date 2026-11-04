@@ -1,6 +1,6 @@
 # Gym tracker
 
-Nuxt + Postgres on Railway. Logs sets (exercise, weight, reps, time). 
+Nuxt + Postgres on Railway. Logs sets, workout sessions, routines, stats and body weight.
 
 ## Local
 
@@ -35,15 +35,17 @@ Signup is disabled in the app, so the seed script is the only way to create a us
 ## Layout
 
 ```
-shared/equipment.ts          equipment type list, shared by client and server
+shared/                      isomorphic helpers: equipment, progress, routines, stats, csv
 server/utils/schema.ts       drizzle schema (app tables + Better Auth's tables)
 server/utils/db.ts           drizzle client
 server/utils/auth.ts         Better Auth config
 server/utils/requireSession.ts  401 guard used by every data route
-server/api/                  exercises (get/post/detail/last-set), sets (get/post/patch/delete)
-app/pages/                   index (log + recent sets), login, exercises/:id (history + chart)
+server/utils/*Input.ts       request validation shared with scripts/check.ts
+server/api/                  sets, workouts, routines, stats, body-weights, export.csv
+app/pages/                   index (log + recent sets), login, exercises/:id, routines, stats
 app/middleware/auth.global.ts  redirects to /login when signed out
 scripts/seed.ts              one user + 26 common lifts
+scripts/check.ts             assert-based checks for pure helpers
 drizzle/                     generated SQL migrations, committed
 ```
 

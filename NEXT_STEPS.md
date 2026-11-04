@@ -60,17 +60,16 @@ Optional: break something on purpose (e.g. POST a set with `reps: 0`) and confir
 - **No `user_id` anywhere.** Deliberate, single user. Adding multi-user later means a migration plus a backfill on `exercises` and `sets`.
 - **Times are stored in UTC**, entered and shown in the browser's local timezone. Travel across timezones will show sets at their original wall-clock-equivalent UTC instant.
 - **Per-exercise history is capped at 1000 sets.** Paginate if any single lift ever exceeds it.
+- **Stats streak is capped at 366 training days** (the day list is fetched in one round trip).
+- **Bodyweight exercises contribute 0 volume**; weigh-ins are logged but not applied per set.
 - **Login rate limiting** is Better Auth's built-in default; nothing custom is configured.
 - **`nuxt typecheck` warning** about `vue-router/volar/sfc-route-blocks` is an upstream version mismatch, not your code. Remove when vue-router ships that export path.
 
-## 5. Next features, roughly in order of value
+## 5. Features
 
-The full roadmap is in `ROADMAP.md`. Short version:
-
-1. Workout/session grouping (`workouts` table + `sets.workout_id`).
-2. Templates/routines built on sessions.
-3. Stats dashboard (weekly volume, equipment split, streak).
-4. Set metadata (notes, RPE, warmup), body weight log, CSV export.
+Workout sessions, routines (with "copy from last session"), set metadata, the stats dashboard,
+CSV export and the body weight log are implemented. Deferred ideas and the endpoint conventions
+new work should follow are in `ROADMAP.md`.
 
 ## 6. Adding the analysis worker
 
