@@ -1,9 +1,20 @@
 <script setup lang="ts">
+import {
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxGroup,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxLabel,
+  ComboboxRoot,
+  ComboboxViewport,
+} from "reka-ui";
 import { EQUIPMENT } from "~~/shared/equipment";
 import { authClient } from "~~/lib/auth-client";
 
 interface SetRow {
   id: string;
+  exerciseId: string;
   reps: number;
   weightKg: string;
   performedAt: string;
@@ -17,21 +28,65 @@ interface Exercise {
   type: string;
 }
 
-function nowLocal() {
-  const d = new Date();
+interface LastSet {
+  reps: number;
+  weightKg: string;
+  performedAt: string;
+}
+
+const PAGE_SIZE = 20;
+
+function localInput(date: Date) {
+  const d = new Date(date);
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 16);
 }
 
+function nowLocal() {
+  return localInput(new Date());
+}
+
+const requestFetch = useRequestFetch();
+
 const { data: exercises, refresh: refreshExercises } = await useFetch<Exercise[]>("/api/exercises");
-const { data: rows, refresh: refreshSets } = await useFetch<SetRow[]>("/api/sets");
+const { data: firstPage, refresh: refreshSets } = await useAsyncData("sets", () =>
+  requestFetch<{ items: SetRow[]; hasMore: boolean }>(`/api/sets?limit=${PAGE_SIZE}`),
+);
+
+const rows = ref<SetRow[]>([]);
+const hasMore = ref(false);
+const loadingMore = ref(false);
+
+watch(
+  firstPage,
+  (page) => {
+    rows.value = page?.items ?? [];
+    hasMore.value = page?.hasMore ?? false;
+  },
+  { immediate: true },
+);
+
+async function loadMore() {
+  loadingMore.value = true;
+  try {
+    const page = await requestFetch<{ items: SetRow[]; hasMore: boolean }>(
+      `/api/sets?limit=${PAGE_SIZE}&offset=${rows.value.length}`,
+    );
+    rows.value.push(...page.items);
+    hasMore.value = page.hasMore;
+  } finally {
+    loadingMore.value = false;
+  }
+}
 
 const form = reactive({
-  exerciseId: "",
   weightKg: "",
   reps: "",
   performedAt: nowLocal(),
 });
+const selectedExercise = ref<Exercise | null>(null);
+const editingId = ref<string | null>(null);
+const lastSet = ref<LastSet | null>(null);
 const error = ref("");
 const busy = ref(false);
 
@@ -39,19 +94,67 @@ const newExercise = reactive({ name: "", type: "barbell" });
 const showNewExercise = ref(false);
 const exerciseError = ref("");
 
-async function addSet() {
-  busy.value = true;
+const exerciseFilter = ref("");
+const filteredExercises = computed(() => {
+  const list = exercises.value ?? [];
+  const query = exerciseFilter.value.trim().toLowerCase();
+  return query ? list.filter((ex) => ex.name.toLowerCase().includes(query) || ex.type.includes(query)) : list;
+});
+const exerciseGroups = computed(() => {
+  const groups: { type: string; items: Exercise[] }[] = [];
+  for (const ex of filteredExercises.value) {
+    let group = groups.find((g) => g.type === ex.type);
+    if (!group) {
+      group = { type: ex.type, items: [] };
+      groups.push(group);
+    }
+    group.items.push(ex);
+  }
+  return groups;
+});
+
+async function prefillLast() {
+  const id = selectedExercise.value?.id;
+  lastSet.value = null;
+  if (!id || editingId.value) return;
+  const last = await requestFetch<LastSet | null>(`/api/exercises/${id}/last-set`);
+  if (selectedExercise.value?.id !== id || editingId.value) return;
+  lastSet.value = last;
+  if (last) {
+    form.weightKg = String(Number(last.weightKg));
+    form.reps = String(last.reps);
+  }
+}
+
+watch(selectedExercise, prefillLast);
+
+function resetForm() {
+  form.weightKg = "";
+  form.reps = "";
+  form.performedAt = nowLocal();
+}
+
+async function saveSet() {
   error.value = "";
+  if (!selectedExercise.value) {
+    error.value = "Pick an exercise";
+    return;
+  }
+  busy.value = true;
+  const body = {
+    exerciseId: selectedExercise.value.id,
+    weightKg: Number(form.weightKg),
+    reps: Number(form.reps),
+    performedAt: new Date(form.performedAt).toISOString(),
+  };
+
   try {
-    await $fetch("/api/sets", {
-      method: "POST",
-      body: {
-        exerciseId: form.exerciseId,
-        weightKg: Number(form.weightKg),
-        reps: Number(form.reps),
-        performedAt: new Date(form.performedAt).toISOString(),
-      },
-    });
+    if (editingId.value) {
+      await requestFetch(`/api/sets/${editingId.value}`, { method: "PATCH", body });
+      editingId.value = null;
+    } else {
+      await requestFetch("/api/sets", { method: "POST", body });
+    }
     form.performedAt = nowLocal();
     await refreshSets();
   } catch (err: any) {
@@ -59,6 +162,22 @@ async function addSet() {
   } finally {
     busy.value = false;
   }
+}
+
+function startEdit(row: SetRow) {
+  editingId.value = row.id;
+  selectedExercise.value = { id: row.exerciseId, name: row.exerciseName, type: row.exerciseType };
+  form.weightKg = String(Number(row.weightKg));
+  form.reps = String(row.reps);
+  form.performedAt = localInput(new Date(row.performedAt));
+  error.value = "";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function cancelEdit() {
+  editingId.value = null;
+  resetForm();
+  await prefillLast();
 }
 
 async function addExercise() {
@@ -69,7 +188,7 @@ async function addExercise() {
       body: { name: newExercise.name, type: newExercise.type },
     });
     await refreshExercises();
-    form.exerciseId = created.id;
+    selectedExercise.value = created;
     newExercise.name = "";
     showNewExercise.value = false;
   } catch (err: any) {
@@ -78,7 +197,8 @@ async function addExercise() {
 }
 
 async function removeSet(id: string) {
-  await $fetch(`/api/sets/${id}`, { method: "DELETE" });
+  await requestFetch(`/api/sets/${id}`, { method: "DELETE" });
+  if (editingId.value === id) await cancelEdit();
   await refreshSets();
 }
 
@@ -123,15 +243,35 @@ const days = computed(() => {
       <button class="linkish" @click="signOut">Sign out</button>
     </header>
 
-    <form @submit.prevent="addSet">
+    <form @submit.prevent="saveSet">
       <div>
         <label for="exercise">Exercise</label>
-        <select id="exercise" v-model="form.exerciseId" required>
-          <option value="" disabled>Pick an exercise</option>
-          <option v-for="ex in exercises" :key="ex.id" :value="ex.id">
-            {{ ex.name }} ({{ ex.type }})
-          </option>
-        </select>
+        <ComboboxRoot v-model="selectedExercise" :ignore-filter="true" class="combobox">
+          <ComboboxInput
+            id="exercise"
+            v-model="exerciseFilter"
+            placeholder="Search exercises"
+            autocomplete="off"
+          />
+          <ComboboxContent class="combobox-list">
+            <ComboboxViewport>
+              <ComboboxGroup v-for="group in exerciseGroups" :key="group.type">
+                <ComboboxLabel class="combobox-group">{{ group.type }}</ComboboxLabel>
+                <ComboboxItem v-for="ex in group.items" :key="ex.id" :value="ex" class="combobox-item">
+                  {{ ex.name }}
+                </ComboboxItem>
+              </ComboboxGroup>
+              <ComboboxEmpty class="combobox-empty">No matches</ComboboxEmpty>
+            </ComboboxViewport>
+          </ComboboxContent>
+        </ComboboxRoot>
+        <p v-if="selectedExercise" class="muted">
+          {{ editingId ? "Editing" : "Selected" }}: {{ selectedExercise.name }}
+          <template v-if="lastSet && !editingId">
+            · Last: {{ Number(lastSet.weightKg) }} kg × {{ lastSet.reps }} ·
+            {{ new Date(lastSet.performedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" }) }}
+          </template>
+        </p>
         <button
           type="button"
           class="linkish"
@@ -183,8 +323,14 @@ const days = computed(() => {
         <input id="performed" v-model="form.performedAt" type="datetime-local" required />
       </div>
 
+      <p v-if="editingId" class="edit-banner">
+        Editing set —
+        <button type="button" class="linkish" @click="cancelEdit">cancel</button>
+      </p>
       <p v-if="error" class="error">{{ error }}</p>
-      <button type="submit" :disabled="busy">{{ busy ? "Saving…" : "Add set" }}</button>
+      <button type="submit" :disabled="busy">
+        {{ busy ? "Saving…" : editingId ? "Save changes" : "Add set" }}
+      </button>
     </form>
 
     <h2>Recent sets</h2>
@@ -192,13 +338,18 @@ const days = computed(() => {
     <div v-for="day in days" :key="day.key" class="day">
       <h3>{{ day.label }}</h3>
       <div v-for="row in day.items" :key="row.id" class="set">
-        <span class="name">{{ row.exerciseName }}</span>
+        <NuxtLink class="name" :to="`/exercises/${row.exerciseId}`">{{ row.exerciseName }}</NuxtLink>
         <span class="load">{{ Number(row.weightKg) }} kg × {{ row.reps }}</span>
         <span class="time">
           {{ new Date(row.performedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }}
         </span>
+        <button class="danger" title="Edit set" @click="startEdit(row)">✎</button>
         <button class="danger" title="Delete set" @click="removeSet(row.id)">✕</button>
       </div>
     </div>
+
+    <button v-if="hasMore" type="button" :disabled="loadingMore" @click="loadMore">
+      {{ loadingMore ? "Loading…" : "Load more" }}
+    </button>
   </main>
 </template>

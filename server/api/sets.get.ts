@@ -2,9 +2,14 @@ import { desc, eq } from "drizzle-orm";
 
 export default defineEventHandler(async (event) => {
   await requireSession(event);
-  return db
+  const query = getQuery(event);
+  const limit = Math.min(Math.max(Math.trunc(Number(query.limit)) || 20, 1), 100);
+  const offset = Math.max(Math.trunc(Number(query.offset)) || 0, 0);
+
+  const rows = await db
     .select({
       id: sets.id,
+      exerciseId: sets.exerciseId,
       reps: sets.reps,
       weightKg: sets.weightKg,
       performedAt: sets.performedAt,
@@ -13,6 +18,9 @@ export default defineEventHandler(async (event) => {
     })
     .from(sets)
     .innerJoin(exercises, eq(sets.exerciseId, exercises.id))
-    .orderBy(desc(sets.performedAt))
-    .limit(20);
+    .orderBy(desc(sets.performedAt), desc(sets.createdAt))
+    .limit(limit + 1)
+    .offset(offset);
+
+  return { items: rows.slice(0, limit), hasMore: rows.length > limit };
 });
