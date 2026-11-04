@@ -39,6 +39,14 @@ export default defineEventHandler(async (event) => {
         .set({ performedAt: sql`${sets.performedAt} + make_interval(secs => ${deltaMs / 1000})` })
         .where(eq(sets.workoutId, id));
     }
+    // Finishing an empty workout is a discard, not a session worth keeping.
+    if (update.endedAt && !existing.endedAt) {
+      const [set] = await tx.select({ id: sets.id }).from(sets).where(eq(sets.workoutId, id)).limit(1);
+      if (!set) {
+        await tx.delete(workouts).where(eq(workouts.id, id));
+        return { deleted: true };
+      }
+    }
     const [row] = await tx.update(workouts).set(update).where(eq(workouts.id, id)).returning();
     return row;
   });

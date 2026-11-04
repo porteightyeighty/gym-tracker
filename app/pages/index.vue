@@ -243,7 +243,7 @@ async function startWorkout(routineId?: string) {
 async function finishWorkout() {
   if (!activeWorkout.value) return;
   const empty = sessionRows.value.length === 0;
-  if (!window.confirm(empty ? "Finish an empty workout?" : "Finish this workout?")) return;
+  if (!window.confirm(empty ? "Discard this empty workout?" : "Finish this workout?")) return;
   await requestFetch(`/api/workouts/${activeWorkout.value.id}`, {
     method: "PATCH",
     body: { endedAt: new Date().toISOString(), notes: workoutNotes.value },
