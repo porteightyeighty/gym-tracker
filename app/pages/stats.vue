@@ -7,9 +7,21 @@ interface Stats {
   totals: { sets: number; days: number; volume: number; streak: number };
 }
 
+interface BodyWeightRow {
+  id: string;
+  weightKg: string;
+  measuredAt: string;
+}
+
 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const weeks = ref(12);
 const requestFetch = useRequestFetch();
+
+function localInput(date: Date) {
+  const copy = new Date(date);
+  copy.setMinutes(copy.getMinutes() - copy.getTimezoneOffset());
+  return copy.toISOString().slice(0, 16);
+}
 
 function startOfWeek(date: Date) {
   const copy = new Date(date);
@@ -74,6 +86,88 @@ const chart = computed(() => {
     }),
   };
 });
+
+const { data: weights, refresh: refreshWeights } = await useFetch<{ items: BodyWeightRow[] }>(
+  "/api/body-weights?limit=30",
+);
+
+const weightForm = reactive({ weightKg: "", measuredAt: localInput(new Date()) });
+const weightError = ref("");
+const weightBusy = ref(false);
+
+async function saveWeight() {
+  weightError.value = "";
+  weightBusy.value = true;
+  try {
+    await requestFetch("/api/body-weights", {
+      method: "POST",
+      body: {
+        weightKg: Number(weightForm.weightKg),
+        measuredAt: new Date(weightForm.measuredAt).toISOString(),
+      },
+    });
+    weightForm.weightKg = "";
+    weightForm.measuredAt = localInput(new Date());
+    await refreshWeights();
+  } catch (err: any) {
+    weightError.value = err?.data?.statusMessage ?? "Could not save weight";
+  } finally {
+    weightBusy.value = false;
+  }
+}
+
+async function removeWeight(id: string) {
+  await requestFetch(`/api/body-weights/${id}`, { method: "DELETE" });
+  await refreshWeights();
+}
+
+const latestWeight = computed(() => weights.value?.items[0] ?? null);
+const weightChange = computed(() => {
+  const latest = latestWeight.value;
+  const previous = weights.value?.items[1];
+  if (!latest || !previous) return "—";
+  const diff = Number(latest.weightKg) - Number(previous.weightKg);
+  return `${diff > 0 ? "+" : ""}${Math.round(diff * 10) / 10} kg`;
+});
+
+const weightChart = computed(() => {
+  const points = [...(weights.value?.items ?? [])].reverse().map((row) => ({
+    date: new Date(row.measuredAt),
+    value: Number(row.weightKg),
+  }));
+  if (!points.length) return null;
+
+  const width = 600;
+  const height = 180;
+  const left = 44;
+  const right = 12;
+  const top = 12;
+  const bottom = 26;
+  const min = Math.min(...points.map((point) => point.value));
+  const max = Math.max(...points.map((point) => point.value));
+  const span = max - min;
+  const x = (index: number) =>
+    points.length === 1
+      ? left + (width - left - right) / 2
+      : left + (index * (width - left - right)) / (points.length - 1);
+  const y = (value: number) =>
+    span === 0
+      ? (top + height - bottom) / 2
+      : top + (1 - (value - min) / span) * (height - top - bottom);
+
+  return {
+    min,
+    max,
+    line: points.map((point, index) => `${x(index)},${y(point.value)}`).join(" "),
+    points: points.map((point, index) => ({ ...point, x: x(index), y: y(point.value) })),
+    first: points[0] ?? null,
+    last: points[points.length - 1] ?? null,
+  };
+});
+
+function shortDate(value: string | Date) {
+  return new Date(value).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
 </script>
 
 <template>
@@ -161,5 +255,95 @@ const chart = computed(() => {
       </table>
       <p v-else class="muted">No sets in this range.</p>
     </template>
+
+    <h2>Body weight</h2>
+    <form @submit.prevent="saveWeight">
+      <div class="row">
+        <div>
+          <label for="weight-kg">Weight (kg)</label>
+          <input
+            id="weight-kg"
+            v-model="weightForm.weightKg"
+            type="number"
+            inputmode="decimal"
+            step="0.1"
+            min="1"
+            max="999"
+            required
+          />
+        </div>
+        <div>
+          <label for="weight-at">When</label>
+          <input id="weight-at" v-model="weightForm.measuredAt" type="datetime-local" required />
+        </div>
+      </div>
+      <p v-if="weightError" class="error">{{ weightError }}</p>
+      <button type="submit" :disabled="weightBusy">
+        {{ weightBusy ? "Saving…" : "Log weight" }}
+      </button>
+    </form>
+
+    <template v-if="latestWeight">
+      <div class="stats" style="margin-top: 1rem">
+        <div class="stat">
+          <div class="label">Latest</div>
+          <div class="value">{{ Number(latestWeight.weightKg) }} kg</div>
+        </div>
+        <div class="stat">
+          <div class="label">Change</div>
+          <div class="value">{{ weightChange }}</div>
+        </div>
+      </div>
+
+      <svg
+        v-if="weightChart"
+        class="chart"
+        viewBox="0 0 600 180"
+        role="img"
+        aria-label="Body weight over time"
+      >
+        <text x="0" y="10">{{ Math.round(weightChart.max * 10) / 10 }} kg</text>
+        <text x="0" y="174">{{ Math.round(weightChart.min * 10) / 10 }} kg</text>
+        <polyline :points="weightChart.line" fill="none" stroke="var(--accent)" stroke-width="2" />
+        <circle
+          v-for="point in weightChart.points"
+          :key="point.date.toISOString()"
+          :cx="point.x"
+          :cy="point.y"
+          r="3"
+          fill="var(--accent)"
+        >
+          <title>{{ shortDate(point.date) }}: {{ point.value }} kg</title>
+        </circle>
+        <text v-if="weightChart.first" x="44" y="174">
+          {{ shortDate(weightChart.first.date) }}
+        </text>
+        <text v-if="weightChart.last" x="588" y="174" text-anchor="end">
+          {{ shortDate(weightChart.last.date) }}
+        </text>
+      </svg>
+
+      <table>
+        <thead>
+          <tr>
+            <th>When</th>
+            <th class="num">Weight</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in weights?.items.slice(0, 10)" :key="row.id">
+            <td>{{ shortDate(row.measuredAt) }}</td>
+            <td class="num">{{ Number(row.weightKg) }} kg</td>
+            <td class="num">
+              <button type="button" class="danger" title="Delete weigh-in" @click="removeWeight(row.id)">
+                ✕
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </template>
+    <p v-else class="muted">No weigh-ins yet.</p>
   </main>
 </template>

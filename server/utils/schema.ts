@@ -122,3 +122,14 @@ export const sets = pgTable(
   },
   (t) => [index("sets_performed_at_idx").on(t.performedAt), index("sets_workout_id_idx").on(t.workoutId)],
 );
+
+export const bodyWeights = pgTable(
+  "body_weights",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    weightKg: numeric("weight_kg", { precision: 6, scale: 2 }).notNull(),
+    measuredAt: timestamp("measured_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("body_weights_measured_at_idx").on(t.measuredAt)],
+);

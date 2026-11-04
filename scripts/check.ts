@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { parseBodyWeightInput } from "../server/utils/bodyWeightInput.ts";
 import { parseRoutineInput } from "../server/utils/routineInput.ts";
 import { parseSetInput } from "../server/utils/setInput.ts";
 import {
@@ -168,5 +169,22 @@ assert.equal(
   'a,b\r\n"x,y","he said ""hi"""\r\n"line\nbreak",2\r\n',
 );
 assert.equal(toCsv(["a"], [[null]]), "a\r\n\r\n");
+
+const bodyWeight = parseBodyWeightInput({
+  weightKg: 80.5,
+  measuredAt: "2026-11-04T07:00:00.000Z",
+});
+assert.equal(bodyWeight.weightKg, "80.50");
+assert.ok(bodyWeight.measuredAt instanceof Date);
+
+for (const bad of [
+  { weightKg: 0, measuredAt: "2026-11-04T07:00:00.000Z" },
+  { weightKg: -1, measuredAt: "2026-11-04T07:00:00.000Z" },
+  { weightKg: 1000, measuredAt: "2026-11-04T07:00:00.000Z" },
+  { weightKg: "heavy", measuredAt: "2026-11-04T07:00:00.000Z" },
+  { weightKg: 80, measuredAt: "nope" },
+]) {
+  assert.throws(() => parseBodyWeightInput(bad), (err: any) => err.statusCode === 400);
+}
 
 console.log("checks passed");
