@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { parseRoutineInput } from "../server/utils/routineInput.ts";
 import { parseSetInput } from "../server/utils/setInput.ts";
 import {
   parseStartWorkoutInput,
   parseUpdateWorkoutInput,
 } from "../server/utils/workoutInput.ts";
 import { dayStats, e1rm } from "../shared/progress.ts";
+import { formatTarget, summariseSession } from "../shared/routines.ts";
 
 const valid = {
   exerciseId: "123e4567-e89b-12d3-a456-426614174000",
@@ -92,5 +94,56 @@ assert.equal(days[0].topWeight, 110);
 assert.equal(days[0].volume, 100 * 5 + 110 * 3);
 assert.ok(Math.abs(days[0].bestE1rm - e1rm(110, 3)) < 1e-9);
 assert.equal(days[1].key, "2026-01-03");
+
+const routine = parseRoutineInput({
+  name: "  Push  ",
+  notes: "  chest  ",
+  exercises: [
+    { exerciseId: valid.exerciseId, targetSets: 3, targetReps: "8", targetWeightKg: 80 },
+    { exerciseId: "123e4567-e89b-12d3-a456-426614174001", targetSets: "", targetReps: null },
+  ],
+});
+assert.equal(routine.name, "Push");
+assert.equal(routine.notes, "chest");
+assert.equal(routine.exercises[0].targetSets, 3);
+assert.equal(routine.exercises[0].targetReps, 8);
+assert.equal(routine.exercises[0].targetWeightKg, "80.00");
+assert.equal(routine.exercises[1].targetSets, null);
+assert.equal(routine.exercises[1].targetWeightKg, null);
+
+for (const bad of [
+  { name: "", exercises: [] },
+  { name: "Push" },
+  { name: "Push", exercises: [{ exerciseId: "nope" }] },
+  { name: "Push", exercises: [{ exerciseId: valid.exerciseId, targetSets: 0 }] },
+  { name: "Push", exercises: [{ exerciseId: valid.exerciseId, targetReps: 1001 }] },
+  { name: "Push", exercises: [{ exerciseId: valid.exerciseId, targetWeightKg: -1 }] },
+]) {
+  assert.throws(() => parseRoutineInput(bad), (err: any) => err.statusCode === 400);
+}
+
+const summary = summariseSession([
+  { exerciseId: "a", exerciseName: "Bench", exerciseType: "barbell", weightKg: "100.00", reps: 5 },
+  { exerciseId: "a", exerciseName: "Bench", exerciseType: "barbell", weightKg: 105, reps: 3 },
+  {
+    exerciseId: "a",
+    exerciseName: "Bench",
+    exerciseType: "barbell",
+    weightKg: 140,
+    reps: 20,
+    isWarmup: true,
+  },
+  { exerciseId: "b", exerciseName: "Row", exerciseType: "barbell", weightKg: "60.00", reps: 10 },
+]);
+assert.equal(summary.length, 2);
+assert.equal(summary[0].exerciseId, "a");
+assert.equal(summary[0].targetSets, 2);
+assert.equal(summary[0].targetWeightKg, "105.00");
+assert.equal(summary[0].targetReps, 3);
+assert.equal(summary[1].name, "Row");
+
+assert.equal(formatTarget(3, 8, "80.00"), "3×8 · 80 kg");
+assert.equal(formatTarget(null, 10, null), "10 reps");
+assert.equal(formatTarget(null, null, null), "");
 
 console.log("checks passed");

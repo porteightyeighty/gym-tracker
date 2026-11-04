@@ -10,6 +10,7 @@ import {
   ComboboxViewport,
 } from "reka-ui";
 import { EQUIPMENT } from "~~/shared/equipment";
+import { formatTarget } from "~~/shared/routines";
 import { authClient } from "~~/lib/auth-client";
 
 interface SetRow {
@@ -31,9 +32,28 @@ interface SetRow {
 
 interface Workout {
   id: string;
+  routineId: string | null;
   startedAt: string;
   endedAt: string | null;
   notes: string | null;
+}
+
+interface RoutineExercise {
+  id: string;
+  exerciseId: string;
+  name: string;
+  type: string;
+  position: number;
+  targetSets: number | null;
+  targetReps: number | null;
+  targetWeightKg: string | null;
+}
+
+interface Routine {
+  id: string;
+  name: string;
+  notes: string | null;
+  exercises: RoutineExercise[];
 }
 
 interface Exercise {
@@ -66,6 +86,7 @@ const { data: exercises, refresh: refreshExercises } = await useFetch<Exercise[]
 const { data: activeWorkout, refresh: refreshActive } = await useFetch<Workout | null>(
   "/api/workouts/active",
 );
+const { data: routines } = await useFetch<{ items: Routine[] }>("/api/routines");
 const { data: firstPage, refresh: refreshSets } = await useAsyncData("sets", () =>
   requestFetch<{ items: SetRow[]; hasMore: boolean }>(`/api/sets?limit=${PAGE_SIZE}`),
 );
@@ -328,6 +349,50 @@ const days = computed(() => {
   }
   return groups;
 });
+
+const routine = computed(() => {
+  const id = activeWorkout.value?.routineId;
+  if (!id) return null;
+  return routines.value?.items.find((item) => item.id === id) ?? null;
+});
+
+const routineItems = computed(() => {
+  if (!routine.value) return [];
+  const workoutId = activeWorkout.value?.id;
+  const logged = new Set(
+    rows.value
+      .filter((row) => row.workoutId === workoutId && !row.isWarmup)
+      .map((row) => row.exerciseId),
+  );
+  let nextFound = false;
+  return routine.value.exercises.map((item) => {
+    const done = logged.has(item.exerciseId);
+    const next = !done && !nextFound;
+    if (next) nextFound = true;
+    return {
+      ...item,
+      done,
+      next,
+      target: formatTarget(item.targetSets, item.targetReps, item.targetWeightKg),
+    };
+  });
+});
+
+function pickRoutineExercise(item: RoutineExercise) {
+  selectedExercise.value = { id: item.exerciseId, name: item.name, type: item.type };
+}
+
+watch(
+  routineItems,
+  (items) => {
+    if (editingId.value) return;
+    const next = items.find((item) => item.next);
+    if (next && selectedExercise.value?.id !== next.exerciseId) {
+      pickRoutineExercise(next);
+    }
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -335,6 +400,7 @@ const days = computed(() => {
     <header>
       <h1>Gym tracker</h1>
       <div class="header-actions">
+        <NuxtLink to="/routines" class="linkish">Routines</NuxtLink>
         <button v-if="!activeWorkout" type="button" class="linkish" @click="startWorkout">
           Start workout
         </button>
@@ -352,6 +418,21 @@ const days = computed(() => {
         <button type="button" class="linkish" @click="signOut">Sign out</button>
       </div>
     </header>
+
+    <section v-if="routine" class="routine">
+      <div class="routine-head">
+        <strong>{{ routine.name }}</strong>
+        <span class="muted">Routine</span>
+      </div>
+      <ol>
+        <li v-for="item in routineItems" :key="item.id" :class="{ done: item.done, next: item.next }">
+          <button type="button" class="linkish" @click="pickRoutineExercise(item)">
+            {{ item.done ? "✓" : item.next ? "→" : "·" }} {{ item.name }}
+          </button>
+          <span v-if="item.target" class="muted">{{ item.target }}</span>
+        </li>
+      </ol>
+    </section>
 
     <form @submit.prevent="saveSet">
       <div>
