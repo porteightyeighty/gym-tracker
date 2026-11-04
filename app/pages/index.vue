@@ -86,14 +86,20 @@ function nowLocal() {
 
 const requestFetch = useRequestFetch();
 
-const { data: exercises, refresh: refreshExercises } = await useFetch<Exercise[]>("/api/exercises");
-const { data: activeWorkout, refresh: refreshActive } = await useFetch<Workout | null>(
-  "/api/workouts/active",
-);
-const { data: routines } = await useFetch<{ items: Routine[] }>("/api/routines");
-const { data: setPage, refresh: refreshSets } = await useAsyncData("session-sets", () =>
-  requestFetch<{ items: SetRow[]; hasMore: boolean }>("/api/sets?limit=50"),
-);
+// Fetched in parallel: awaiting each in turn made every visit wait for four round trips.
+const [
+  { data: exercises, refresh: refreshExercises },
+  { data: activeWorkout, refresh: refreshActive },
+  { data: routines },
+  { data: setPage, refresh: refreshSets },
+] = await Promise.all([
+  useFetch<Exercise[]>("/api/exercises"),
+  useFetch<Workout | null>("/api/workouts/active"),
+  useFetch<{ items: Routine[] }>("/api/routines"),
+  useAsyncData("session-sets", () =>
+    requestFetch<{ items: SetRow[]; hasMore: boolean }>("/api/sets?limit=50"),
+  ),
+]);
 
 const rows = ref<SetRow[]>([]);
 watch(

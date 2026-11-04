@@ -36,14 +36,17 @@ const from = computed(() => {
   return start;
 });
 
-const { data, error } = await useAsyncData(
-  () => `stats-${weeks.value}`,
-  () =>
-    requestFetch<Stats>("/api/stats", {
-      query: { from: from.value.toISOString(), to: new Date().toISOString(), tz },
-    }),
-  { watch: [weeks] },
-);
+const [{ data, error }, { data: weights, refresh: refreshWeights }] = await Promise.all([
+  useAsyncData(
+    () => `stats-${weeks.value}`,
+    () =>
+      requestFetch<Stats>("/api/stats", {
+        query: { from: from.value.toISOString(), to: new Date().toISOString(), tz },
+      }),
+    { watch: [weeks] },
+  ),
+  useFetch<{ items: BodyWeightRow[] }>("/api/body-weights?limit=30"),
+]);
 
 function formatWeek(week: string) {
   return new Date(`${week}T00:00:00`).toLocaleDateString(undefined, {
@@ -87,9 +90,6 @@ const chart = computed(() => {
   };
 });
 
-const { data: weights, refresh: refreshWeights } = await useFetch<{ items: BodyWeightRow[] }>(
-  "/api/body-weights?limit=30",
-);
 
 const weightForm = reactive({ weightKg: "", measuredAt: localInput(new Date()) });
 const weightError = ref("");

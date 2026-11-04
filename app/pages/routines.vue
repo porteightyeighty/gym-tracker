@@ -46,10 +46,10 @@ interface LastSession {
 }
 
 const requestFetch = useRequestFetch();
-const { data: routines, refresh: refreshRoutines } = await useFetch<{ items: Routine[] }>(
-  "/api/routines",
-);
-const { data: exercises } = await useFetch<Exercise[]>("/api/exercises");
+const [{ data: routines, refresh: refreshRoutines }, { data: exercises }] = await Promise.all([
+  useFetch<{ items: Routine[] }>("/api/routines"),
+  useFetch<Exercise[]>("/api/exercises"),
+]);
 
 const sortedExercises = computed(() =>
   [...(exercises.value ?? [])].sort((a, b) => a.name.localeCompare(b.name)),

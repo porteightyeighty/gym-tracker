@@ -18,6 +18,7 @@ function isActive(to: string) {
 
 <template>
   <div>
+    <NuxtLoadingIndicator />
     <NuxtPage />
     <nav v-if="showTabs" class="tabbar" aria-label="Main">
       <NuxtLink

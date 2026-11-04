@@ -39,32 +39,32 @@ export default defineEventHandler(async (event) => {
   const week = sql<string>`to_char(date_trunc('week', ${sets.performedAt} AT TIME ZONE ${tz}), 'YYYY-MM-DD')`;
   const localDay = sql<string>`to_char(${sets.performedAt} AT TIME ZONE ${tz}, 'YYYY-MM-DD')`;
 
-  const weekly = await db
-    .select({
+  const [weekly, equipment, dayRows] = await Promise.all([
+    db
+      .select({
       week,
       volume: sql<number>`coalesce(sum(${sets.weightKg} * ${sets.reps}), 0)::float8`,
       sets: sql<number>`count(*)::int`,
     })
-    .from(sets)
-    .where(range)
-    .groupBy(sql`1`)
-    .orderBy(sql`1`);
-
-  const equipment = await db
-    .select({ type: exercises.type, sets: sql<number>`count(*)::int` })
-    .from(sets)
-    .innerJoin(exercises, eq(sets.exerciseId, exercises.id))
-    .where(range)
-    .groupBy(exercises.type)
-    .orderBy(desc(sql`count(*)`));
-
-  const dayRows = await db
-    .select({ day: localDay })
-    .from(sets)
-    .where(and(lt(sets.performedAt, to), eq(sets.isWarmup, false)))
-    .groupBy(sql`1`)
-    .orderBy(sql`1 desc`)
-    .limit(366); // shortcut: streak sees at most the last 366 training days
+      .from(sets)
+      .where(range)
+      .groupBy(sql`1`)
+      .orderBy(sql`1`),
+    db
+      .select({ type: exercises.type, sets: sql<number>`count(*)::int` })
+      .from(sets)
+      .innerJoin(exercises, eq(sets.exerciseId, exercises.id))
+      .where(range)
+      .groupBy(exercises.type)
+      .orderBy(desc(sql`count(*)`)),
+    db
+      .select({ day: localDay })
+      .from(sets)
+      .where(and(lt(sets.performedAt, to), eq(sets.isWarmup, false)))
+      .groupBy(sql`1`)
+      .orderBy(sql`1 desc`)
+      .limit(366), // shortcut: streak sees at most the last 366 training days
+  ]);
 
   const days = dayRows.map((row) => row.day);
   const fromKey = dayKeyInZone(from, tz);
