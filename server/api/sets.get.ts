@@ -5,6 +5,10 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event);
   const limit = Math.min(Math.max(Math.trunc(Number(query.limit)) || 20, 1), 100);
   const offset = Math.max(Math.trunc(Number(query.offset)) || 0, 0);
+  const workoutId = query.workoutId ? String(query.workoutId) : undefined;
+  if (workoutId && !isUuid(workoutId)) {
+    throw createError({ statusCode: 400, statusMessage: "Invalid workout id" });
+  }
 
   const rows = await db
     .select({
@@ -26,6 +30,7 @@ export default defineEventHandler(async (event) => {
     .from(sets)
     .innerJoin(exercises, eq(sets.exerciseId, exercises.id))
     .leftJoin(workouts, eq(sets.workoutId, workouts.id))
+    .where(workoutId ? eq(sets.workoutId, workoutId) : undefined)
     .orderBy(desc(sets.performedAt), desc(sets.createdAt))
     .limit(limit + 1)
     .offset(offset);

@@ -3,6 +3,7 @@ import { createError } from "h3";
 const MAX_NOTES = 2000;
 
 export interface WorkoutUpdate {
+  startedAt?: Date;
   endedAt?: Date;
   notes?: string | null;
 }
@@ -39,9 +40,26 @@ export function parseStartWorkoutInput(body: any) {
 export function parseUpdateWorkoutInput(body: any): WorkoutUpdate {
   if (!body || typeof body !== "object") return {};
   const input: WorkoutUpdate = {};
+  if (body.startedAt !== undefined && body.startedAt !== null) {
+    input.startedAt = parseDate(body.startedAt, "Invalid start date");
+  }
   if (body.endedAt !== undefined && body.endedAt !== null) {
     input.endedAt = parseDate(body.endedAt, "Invalid end date");
   }
   if ("notes" in body) input.notes = parseNotes(body.notes);
   return input;
+}
+
+/** Moves a session and everything in it by the same offset, so the sets stay on the session. */
+export function shiftSession(
+  existing: { startedAt: Date; endedAt: Date | null },
+  input: WorkoutUpdate,
+) {
+  const deltaMs = input.startedAt ? input.startedAt.getTime() - existing.startedAt.getTime() : 0;
+  const startedAt = new Date(existing.startedAt.getTime() + deltaMs);
+  const endedAt = existing.endedAt ? new Date(existing.endedAt.getTime() + deltaMs) : null;
+  if (endedAt && endedAt < startedAt) {
+    throw createError({ statusCode: 400, statusMessage: "Workout cannot end before it starts" });
+  }
+  return { deltaMs, startedAt, endedAt };
 }

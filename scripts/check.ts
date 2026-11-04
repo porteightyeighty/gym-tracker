@@ -5,6 +5,7 @@ import { parseSetInput } from "../server/utils/setInput.ts";
 import {
   parseStartWorkoutInput,
   parseUpdateWorkoutInput,
+  shiftSession,
 } from "../server/utils/workoutInput.ts";
 import { dayStats, e1rm } from "../shared/progress.ts";
 import { formatTarget, summariseSession } from "../shared/routines.ts";
@@ -186,5 +187,32 @@ for (const bad of [
 ]) {
   assert.throws(() => parseBodyWeightInput(bad), (err: any) => err.statusCode === 400);
 }
+
+const session = {
+  startedAt: new Date("2026-11-02T17:00:00.000Z"),
+  endedAt: new Date("2026-11-02T17:54:00.000Z"),
+};
+
+const unchanged = shiftSession(session, {});
+assert.equal(unchanged.deltaMs, 0);
+assert.equal(unchanged.startedAt.getTime(), session.startedAt.getTime());
+assert.equal(unchanged.endedAt?.getTime(), session.endedAt.getTime());
+
+const shifted = shiftSession(session, { startedAt: new Date("2026-11-05T17:00:00.000Z") });
+assert.equal(shifted.deltaMs, 3 * 86_400_000);
+assert.equal(shifted.startedAt.toISOString(), "2026-11-05T17:00:00.000Z");
+assert.equal(shifted.endedAt?.toISOString(), "2026-11-05T17:54:00.000Z");
+
+const openSession = shiftSession(
+  { startedAt: session.startedAt, endedAt: null },
+  { startedAt: new Date("2026-11-01T17:00:00.000Z") },
+);
+assert.equal(openSession.endedAt, null);
+
+assert.ok(parseUpdateWorkoutInput({ startedAt: "2026-11-05T17:00:00.000Z" }).startedAt instanceof Date);
+assert.throws(
+  () => parseUpdateWorkoutInput({ startedAt: "nope" }),
+  (err: any) => err.statusCode === 400,
+);
 
 console.log("checks passed");

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export default defineEventHandler(async (event) => {
   await requireSession(event);
@@ -11,10 +11,19 @@ export default defineEventHandler(async (event) => {
   const [existing] = await db.select().from(workouts).where(eq(workouts.id, id));
   if (!existing) throw createError({ statusCode: 404, statusMessage: "Workout not found" });
 
-  const update: { endedAt?: Date; notes?: string | null } = {};
+  const { deltaMs, startedAt, endedAt } = shiftSession(
+    { startedAt: existing.startedAt, endedAt: existing.endedAt },
+    input,
+  );
+
+  const update: { startedAt?: Date; endedAt?: Date; notes?: string | null } = {};
   if (input.notes !== undefined) update.notes = input.notes;
+  if (deltaMs) {
+    update.startedAt = startedAt;
+    if (endedAt) update.endedAt = endedAt;
+  }
   if (input.endedAt) {
-    if (input.endedAt < existing.startedAt) {
+    if (input.endedAt < startedAt) {
       throw createError({ statusCode: 400, statusMessage: "Workout cannot end before it starts" });
     }
     // Finishing is idempotent: keep the first end time.
@@ -22,6 +31,15 @@ export default defineEventHandler(async (event) => {
   }
 
   if (!Object.keys(update).length) return existing;
-  const [row] = await db.update(workouts).set(update).where(eq(workouts.id, id)).returning();
-  return row;
+
+  return db.transaction(async (tx) => {
+    if (deltaMs) {
+      await tx
+        .update(sets)
+        .set({ performedAt: sql`${sets.performedAt} + make_interval(secs => ${deltaMs / 1000})` })
+        .where(eq(sets.workoutId, id));
+    }
+    const [row] = await tx.update(workouts).set(update).where(eq(workouts.id, id)).returning();
+    return row;
+  });
 });

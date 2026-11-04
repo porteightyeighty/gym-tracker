@@ -79,7 +79,15 @@ function groupLabel(row: SetRow) {
 }
 
 const days = computed(() => {
-  const groups: { key: string; label: string; notes: string | null; items: SetRow[] }[] = [];
+  const groups: {
+    key: string;
+    label: string;
+    notes: string | null;
+    workoutId: string | null;
+    startedAt: string | null;
+    endedAt: string | null;
+    items: SetRow[];
+  }[] = [];
   for (const row of rows.value ?? []) {
     const date = new Date(row.performedAt);
     const key = row.workoutId ? `workout:${row.workoutId}` : `day:${date.toDateString()}`;
@@ -89,6 +97,9 @@ const days = computed(() => {
         key,
         label: groupLabel(row),
         notes: row.workoutId ? row.workoutNotes : null,
+        workoutId: row.workoutId,
+        startedAt: row.workoutStartedAt,
+        endedAt: row.workoutEndedAt,
         items: [],
       };
       groups.push(group);
@@ -99,6 +110,67 @@ const days = computed(() => {
 });
 
 const pendingEdit = useState<SetRow | null>("edit-set", () => null);
+const pendingLog = useState<{ workoutId: string; startedAt: string; endedAt: string | null } | null>(
+  "log-into-workout",
+  () => null,
+);
+
+const notesFor = ref<string | null>(null);
+const notesDraft = ref("");
+const dateFor = ref<string | null>(null);
+const dateDraft = ref("");
+const sessionError = ref("");
+const sessionBusy = ref(false);
+
+function localInput(date: Date) {
+  const d = new Date(date);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+
+async function patchSession(id: string, body: Record<string, unknown>) {
+  sessionError.value = "";
+  sessionBusy.value = true;
+  try {
+    await requestFetch(`/api/workouts/${id}`, { method: "PATCH", body });
+    notesFor.value = null;
+    dateFor.value = null;
+    await refreshSets();
+  } catch (err: any) {
+    sessionError.value = err?.data?.statusMessage ?? "Could not update session";
+  } finally {
+    sessionBusy.value = false;
+  }
+}
+
+function startNotes(group: { workoutId: string | null; notes: string | null }) {
+  notesFor.value = group.workoutId;
+  notesDraft.value = group.notes ?? "";
+}
+
+function startDate(group: { workoutId: string | null; startedAt: string | null }) {
+  if (!group.startedAt) return;
+  dateFor.value = group.workoutId;
+  dateDraft.value = localInput(new Date(group.startedAt));
+}
+
+async function removeSession(group: { workoutId: string | null; items: SetRow[] }) {
+  if (!group.workoutId) return;
+  if (!window.confirm(`Delete this session and its ${group.items.length} sets?`)) return;
+  sessionError.value = "";
+  try {
+    await requestFetch(`/api/workouts/${group.workoutId}`, { method: "DELETE" });
+    await refreshSets();
+  } catch (err: any) {
+    sessionError.value = err?.data?.statusMessage ?? "Could not delete session";
+  }
+}
+
+async function addSetTo(group: { workoutId: string | null; startedAt: string | null; endedAt: string | null }) {
+  if (!group.workoutId || !group.startedAt) return;
+  pendingLog.value = { workoutId: group.workoutId, startedAt: group.startedAt, endedAt: group.endedAt };
+  await navigateTo("/");
+}
 
 function editRow(row: SetRow) {
   pendingEdit.value = row;
@@ -120,6 +192,7 @@ function timeOf(value: string) {
     <h1>History</h1>
 
     <p v-if="error" class="error">{{ error }}</p>
+    <p v-if="sessionError" class="error">{{ sessionError }}</p>
     <p v-if="!days.length" class="muted">No sets logged yet.</p>
 
     <section v-for="day in days" :key="day.key" class="group">
@@ -127,6 +200,46 @@ function timeOf(value: string) {
         <h3>{{ day.label }}</h3>
         <span class="muted">{{ day.items.length }} {{ day.items.length === 1 ? "set" : "sets" }}</span>
       </div>
+
+      <div v-if="day.workoutId" class="actions">
+        <button type="button" class="linkish" @click="addSetTo(day)">+ Set</button>
+        <button type="button" class="linkish" @click="startNotes(day)">Notes</button>
+        <button type="button" class="linkish" @click="startDate(day)">Date</button>
+        <button type="button" class="danger" title="Delete session" @click="removeSession(day)">✕</button>
+      </div>
+
+      <div v-if="notesFor && notesFor === day.workoutId" class="details-body">
+        <input v-model="notesDraft" maxlength="2000" placeholder="How did it go?" />
+        <div class="actions">
+          <button
+            type="button"
+            :disabled="sessionBusy"
+            @click="patchSession(day.workoutId!, { notes: notesDraft.trim() || null })"
+          >
+            Save
+          </button>
+          <button type="button" class="ghost" @click="notesFor = null">Cancel</button>
+        </div>
+      </div>
+
+      <div v-if="dateFor && dateFor === day.workoutId" class="details-body">
+        <div class="field">
+          <label :for="`date-${day.key}`">Session start</label>
+          <input :id="`date-${day.key}`" v-model="dateDraft" type="datetime-local" />
+        </div>
+        <p class="muted">Every set in this session moves with it.</p>
+        <div class="actions">
+          <button
+            type="button"
+            :disabled="sessionBusy || !dateDraft"
+            @click="patchSession(day.workoutId!, { startedAt: new Date(dateDraft).toISOString() })"
+          >
+            Save
+          </button>
+          <button type="button" class="ghost" @click="dateFor = null">Cancel</button>
+        </div>
+      </div>
+
       <p v-if="day.notes" class="muted">{{ day.notes }}</p>
       <div class="set-list">
         <div v-for="row in day.items" :key="row.id" class="set-row">

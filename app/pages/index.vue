@@ -38,6 +38,12 @@ interface Workout {
   notes: string | null;
 }
 
+interface LogTarget {
+  workoutId: string;
+  startedAt: string;
+  endedAt: string | null;
+}
+
 interface RoutineExercise {
   id: string;
   exerciseId: string;
@@ -131,6 +137,34 @@ watch(editingId, (id) => {
 });
 
 const pendingEdit = useState<SetRow | null>("edit-set", () => null);
+const pendingLog = useState<LogTarget | null>("log-into-workout", () => null);
+const logTarget = ref<LogTarget | null>(null);
+const targetRows = ref<SetRow[]>([]);
+
+function nextSlot(target: LogTarget, items: SetRow[]) {
+  const last = items.reduce((max, row) => Math.max(max, new Date(row.performedAt).getTime()), 0);
+  const base = last || new Date(target.endedAt ?? target.startedAt).getTime();
+  return localInput(new Date(base + 180_000));
+}
+
+function nextPerformedAt() {
+  return logTarget.value ? nextSlot(logTarget.value, targetRows.value) : nowLocal();
+}
+
+async function loadTargetRows() {
+  const target = logTarget.value;
+  if (!target) return;
+  const page = await requestFetch<{ items: SetRow[] }>(
+    `/api/sets?workoutId=${target.workoutId}&limit=100`,
+  );
+  if (logTarget.value?.workoutId === target.workoutId) targetRows.value = page.items;
+}
+
+function finishTarget() {
+  logTarget.value = null;
+  targetRows.value = [];
+  return navigateTo("/history");
+}
 
 onMounted(() => {
   now.value = Date.now();
@@ -140,6 +174,12 @@ onMounted(() => {
   if (pendingEdit.value) {
     startEdit(pendingEdit.value);
     pendingEdit.value = null;
+  }
+  if (pendingLog.value) {
+    logTarget.value = pendingLog.value;
+    pendingLog.value = null;
+    form.performedAt = nextPerformedAt();
+    void loadTargetRows();
   }
 });
 
@@ -202,7 +242,8 @@ async function startWorkout(routineId?: string) {
 
 async function finishWorkout() {
   if (!activeWorkout.value) return;
-  if (!window.confirm("Finish this workout?")) return;
+  const empty = sessionRows.value.length === 0;
+  if (!window.confirm(empty ? "Finish an empty workout?" : "Finish this workout?")) return;
   await requestFetch(`/api/workouts/${activeWorkout.value.id}`, {
     method: "PATCH",
     body: { endedAt: new Date().toISOString(), notes: workoutNotes.value },
@@ -257,7 +298,7 @@ function resetForm() {
   form.notes = "";
   form.rpe = "";
   form.isWarmup = false;
-  form.performedAt = nowLocal();
+  form.performedAt = nextPerformedAt();
 }
 
 function stepWeight(delta: number) {
@@ -277,6 +318,7 @@ async function saveSet() {
     return;
   }
   busy.value = true;
+  const intoTarget = editingId.value ? null : logTarget.value;
   const body = {
     exerciseId: selectedExercise.value.id,
     weightKg: Number(form.weightKg),
@@ -285,6 +327,7 @@ async function saveSet() {
     rpe: form.rpe === "" ? null : Number(form.rpe),
     isWarmup: form.isWarmup,
     performedAt: new Date(form.performedAt).toISOString(),
+    ...(intoTarget ? { workoutId: intoTarget.workoutId } : {}),
   };
 
   try {
@@ -295,9 +338,14 @@ async function saveSet() {
     } else {
       await requestFetch("/api/sets", { method: "POST", body });
     }
-    if (!wasEditing && !form.isWarmup) startRest();
-    form.performedAt = nowLocal();
-    await refreshSets();
+    if (intoTarget) {
+      await loadTargetRows();
+      form.performedAt = nextPerformedAt();
+    } else {
+      if (!wasEditing && !form.isWarmup) startRest();
+      form.performedAt = nowLocal();
+      await refreshSets();
+    }
   } catch (err: any) {
     error.value = err?.data?.statusMessage ?? "Could not save set";
   } finally {
@@ -356,7 +404,9 @@ async function signOut() {
 }
 
 const sessionRows = computed(() =>
-  rows.value.filter((row) => row.workoutId === activeWorkout.value?.id),
+  logTarget.value
+    ? targetRows.value
+    : rows.value.filter((row) => row.workoutId === activeWorkout.value?.id),
 );
 
 const routine = computed(() => {
@@ -414,7 +464,7 @@ function timeOf(value: string) {
 
 <template>
   <main class="page" :class="{ 'has-rest': restEndsAt !== null }">
-    <template v-if="!activeWorkout && !editingId">
+    <template v-if="!activeWorkout && !editingId && !logTarget">
       <header class="hero">
         <h1>Ready to train?</h1>
         <p class="muted">Start an empty workout, or jump into a routine.</p>
@@ -445,8 +495,24 @@ function timeOf(value: string) {
     </template>
 
     <template v-else>
-      <header v-if="!activeWorkout">
+      <header v-if="!activeWorkout && !logTarget">
         <h1>Edit set</h1>
+      </header>
+
+      <header v-if="logTarget" class="session-head">
+        <div class="grow">
+          <h1>Add to session</h1>
+          <p class="micro">
+            {{
+              new Date(logTarget.startedAt).toLocaleDateString(undefined, {
+                weekday: "short",
+                day: "numeric",
+                month: "short",
+              })
+            }}
+          </p>
+        </div>
+        <button type="button" class="ghost" @click="finishTarget">Done</button>
       </header>
 
       <header v-if="activeWorkout" class="session-head">
@@ -628,7 +694,7 @@ function timeOf(value: string) {
       </form>
 
       <section v-if="sessionRows.length" class="card">
-        <h2>This session · {{ sessionRows.length }}</h2>
+        <h2>{{ logTarget ? "Session" : "This session" }} · {{ sessionRows.length }}</h2>
         <div class="set-list">
           <div v-for="row in sessionRows" :key="row.id" class="set-row">
             <div class="set-line">
