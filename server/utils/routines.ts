@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, exists, isNotNull, sql } from "drizzle-orm";
 import type { RoutineInput } from "./routineInput.ts";
 
 export interface RoutineExerciseRow {
@@ -97,11 +97,14 @@ export async function replaceRoutine(id: string, input: RoutineInput) {
 }
 
 export async function findLastWorkout(routineId?: string) {
+  // An ended workout with no sets (started, then finished by mistake) must not shadow a real session.
+  const hasSets = exists(db.select({ one: sql`1` }).from(sets).where(eq(sets.workoutId, workouts.id)));
+
   if (routineId) {
     const [byRoutine] = await db
       .select()
       .from(workouts)
-      .where(and(eq(workouts.routineId, routineId), isNotNull(workouts.endedAt)))
+      .where(and(eq(workouts.routineId, routineId), isNotNull(workouts.endedAt), hasSets))
       .orderBy(desc(workouts.startedAt))
       .limit(1);
     if (byRoutine) return byRoutine;
@@ -110,7 +113,7 @@ export async function findLastWorkout(routineId?: string) {
   const [latest] = await db
     .select()
     .from(workouts)
-    .where(isNotNull(workouts.endedAt))
+    .where(and(isNotNull(workouts.endedAt), hasSets))
     .orderBy(desc(workouts.startedAt))
     .limit(1);
   return latest ?? null;
