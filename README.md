@@ -14,7 +14,7 @@ plus a small analysis worker, sharing one database.
   with a rest timer. Empty workouts are discarded when you finish.
 - **Routines.** Saved exercise lists, with "copy from last session" to repeat the previous
   weights and reps.
-- **Set details.** Notes, RPE and a warm-up flag on any set.
+- **Set details.** Notes and RPE on any set.
 - **Cardio.** Cardio machines log a duration and optional distance instead of weight × reps.
 - **Stats.** Weekly volume, training streak and per-exercise top-set history.
 - **Analysis.** Personal-record badges on sets, a plateau hint, and a next-session target per
@@ -63,7 +63,7 @@ claimed again (tested by killing a worker mid-batch). A failing event is retried
 (2, 4, 8, … s) and after 5 attempts stays unprocessed as a dead letter, logged and counted in the
 worker's heartbeat. No Kafka or RabbitMQ; `LISTEN/NOTIFY` would wake it sooner but polling is enough.
 
-**Analysis rules** (`shared/analysis.ts`). Warm-ups are ignored, and only finished sessions count.
+**Analysis rules** (`shared/analysis.ts`). Only finished sessions count.
 - *Personal record:* a session's best set that strictly beats every earlier session, for estimated
   1RM (Epley) and for weight at an exact rep count. The first session is the baseline; ties and
   first-ever rep counts aren't records. At 0 kg (bodyweight) the record is most reps.

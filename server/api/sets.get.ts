@@ -22,7 +22,6 @@ export default defineEventHandler(async (event) => {
       rpe: sets.rpe,
       durationSeconds: sets.durationSeconds,
       distanceKm: sets.distanceKm,
-      isWarmup: sets.isWarmup,
       exerciseName: exercises.name,
       exerciseType: exercises.type,
       workoutStartedAt: workouts.startedAt,

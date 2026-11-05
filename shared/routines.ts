@@ -4,7 +4,6 @@ export interface SessionSet {
   exerciseType: string;
   weightKg: string | number;
   reps: number;
-  isWarmup?: boolean;
 }
 
 export interface RoutineExerciseDraft {
@@ -23,7 +22,6 @@ export function summariseSession(rows: SessionSet[]): RoutineExerciseDraft[] {
   >();
 
   for (const row of rows) {
-    if (row.isWarmup) continue;
     const weight = Number(row.weightKg);
     const existing = byExercise.get(row.exerciseId);
 

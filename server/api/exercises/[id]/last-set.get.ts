@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 export default defineEventHandler(async (event) => {
   await requireSession(event);
@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
       performedAt: sets.performedAt,
     })
     .from(sets)
-    .where(and(eq(sets.exerciseId, id), eq(sets.isWarmup, false)))
+    .where(eq(sets.exerciseId, id))
     .orderBy(desc(sets.performedAt))
     .limit(1);
 

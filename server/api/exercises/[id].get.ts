@@ -22,7 +22,6 @@ export default defineEventHandler(async (event) => {
       rpe: sets.rpe,
       durationSeconds: sets.durationSeconds,
       distanceKm: sets.distanceKm,
-      isWarmup: sets.isWarmup,
     })
     .from(sets)
     .where(eq(sets.exerciseId, id))

@@ -22,7 +22,6 @@ export interface AnalysisSet {
   weightKg: string | number;
   reps: number;
   performedAt: string | Date;
-  isWarmup: boolean;
 }
 
 export interface WorkingSet {
@@ -75,8 +74,7 @@ function compareSets(a: WorkingSet, b: WorkingSet) {
 }
 
 /**
- * Working sets grouped into sessions, oldest first. Warm-ups are dropped before grouping, so a
- * session of only warm-ups does not exist. Sets in a workout group by workout; sets with no
+ * Sets grouped into sessions, oldest first. Sets in a workout group by workout; sets with no
  * workout group by time gaps, which avoids picking a timezone for "same day".
  */
 export function groupSessions(rows: AnalysisSet[]): Session[] {
@@ -84,7 +82,6 @@ export function groupSessions(rows: AnalysisSet[]): Session[] {
   const loose: { set: WorkingSet; routineId: string | null }[] = [];
 
   for (const row of rows) {
-    if (row.isWarmup) continue;
     const performedAt = new Date(row.performedAt);
     if (Number.isNaN(performedAt.getTime())) continue;
     const weightKg = Number(row.weightKg);

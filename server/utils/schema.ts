@@ -122,7 +122,6 @@ export const sets = pgTable(
     // Cardio entries only (exercise type "cardio"): duration is required there, reps and weight are 0.
     durationSeconds: integer("duration_seconds"),
     distanceKm: numeric("distance_km", { precision: 7, scale: 2 }),
-    isWarmup: boolean("is_warmup").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("sets_performed_at_idx").on(t.performedAt), index("sets_workout_id_idx").on(t.workoutId)],

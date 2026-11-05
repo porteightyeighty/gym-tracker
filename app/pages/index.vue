@@ -24,7 +24,6 @@ interface SetRow {
   performedAt: string;
   notes: string | null;
   rpe: string | null;
-  isWarmup: boolean;
   durationSeconds: number | null;
   distanceKm: string | null;
   exerciseName: string;
@@ -134,7 +133,6 @@ const form = reactive({
   distanceKm: "",
   notes: "",
   rpe: "",
-  isWarmup: false,
   performedAt: nowLocal(),
 });
 const selectedExercise = ref<Exercise | null>(null);
@@ -338,7 +336,6 @@ function resetForm() {
   form.distanceKm = "";
   form.notes = "";
   form.rpe = "";
-  form.isWarmup = false;
   form.performedAt = nextPerformedAt();
 }
 
@@ -373,7 +370,6 @@ async function saveSet() {
       : { weightKg: Number(form.weightKg), reps: Number(form.reps) }),
     notes: form.notes.trim() || null,
     rpe: form.rpe === "" ? null : Number(form.rpe),
-    isWarmup: form.isWarmup,
     performedAt: new Date(form.performedAt).toISOString(),
     ...(intoTarget ? { workoutId: intoTarget.workoutId } : {}),
   };
@@ -390,7 +386,7 @@ async function saveSet() {
       await loadTargetRows();
       form.performedAt = nextPerformedAt();
     } else {
-      if (!wasEditing && !form.isWarmup && !cardio) startRest();
+      if (!wasEditing && !cardio) startRest();
       form.performedAt = nowLocal();
       await refreshSets();
     }
@@ -410,7 +406,6 @@ function startEdit(row: SetRow) {
   form.distanceKm = row.distanceKm ? String(Number(row.distanceKm)) : "";
   form.notes = row.notes ?? "";
   form.rpe = row.rpe ? String(Number(row.rpe)) : "";
-  form.isWarmup = row.isWarmup;
   form.performedAt = localInput(new Date(row.performedAt));
   error.value = "";
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -470,7 +465,7 @@ const routineItems = computed(() => {
   const workoutId = activeWorkout.value?.id;
   const logged = new Set(
     rows.value
-      .filter((row) => row.workoutId === workoutId && !row.isWarmup)
+      .filter((row) => row.workoutId === workoutId)
       .map((row) => row.exerciseId),
   );
   let nextFound = false;
@@ -727,11 +722,7 @@ function timeOf(value: string) {
           </div>
         </div>
 
-        <div v-if="!cardioSelected" class="card-head">
-          <label class="toggle">
-            <input v-model="form.isWarmup" type="checkbox" />
-            Warmup
-          </label>
+        <div v-if="!cardioSelected" class="card-head" style="justify-content: flex-end">
           <button type="button" class="ghost" @click="startRest()">
             Rest {{ restDuration }}s
           </button>
@@ -790,7 +781,6 @@ function timeOf(value: string) {
             <div class="set-sub">
               <span>{{ timeOf(row.performedAt) }}</span>
               <span v-if="row.rpe" class="tag">RPE {{ Number(row.rpe) }}</span>
-              <span v-if="row.isWarmup" class="tag">warmup</span>
               <span v-for="pr in row.records" :key="pr.kind" class="tag pr">
                 {{ recordLabel(pr.kind, pr.reps) }}
               </span>

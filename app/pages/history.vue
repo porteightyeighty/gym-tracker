@@ -11,7 +11,6 @@ interface SetRow {
   performedAt: string;
   notes: string | null;
   rpe: string | null;
-  isWarmup: boolean;
   durationSeconds: number | null;
   distanceKm: string | null;
   exerciseName: string;
@@ -258,7 +257,6 @@ function timeOf(value: string) {
           <div class="set-sub">
             <span>{{ timeOf(row.performedAt) }}</span>
             <span v-if="row.rpe" class="tag">RPE {{ Number(row.rpe) }}</span>
-            <span v-if="row.isWarmup" class="tag">warmup</span>
             <span v-for="pr in row.records" :key="pr.kind" class="tag pr">{{ recordLabel(pr.kind, pr.reps) }}</span>
             <span v-if="row.notes" class="set-note" :title="row.notes">{{ row.notes }}</span>
           </div>

@@ -61,7 +61,6 @@ export async function recomputeExercise(tx: Tx, exerciseId: string): Promise<voi
       weightKg: sets.weightKg,
       reps: sets.reps,
       performedAt: sets.performedAt,
-      isWarmup: sets.isWarmup,
     })
     .from(sets)
     .leftJoin(workouts, eq(sets.workoutId, workouts.id))

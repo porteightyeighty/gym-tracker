@@ -50,6 +50,13 @@
       "when": 1793876783415,
       "tag": "0006_sleepy_wolfsbane",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793878268977,
+      "tag": "0007_quick_stellaris",
+      "breakpoints": true
     }
   ]
 }

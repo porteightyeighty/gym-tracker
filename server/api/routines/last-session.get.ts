@@ -19,7 +19,6 @@ export default defineEventHandler(async (event) => {
       exerciseType: exercises.type,
       weightKg: sets.weightKg,
       reps: sets.reps,
-      isWarmup: sets.isWarmup,
     })
     .from(sets)
     .innerJoin(exercises, eq(sets.exerciseId, exercises.id))

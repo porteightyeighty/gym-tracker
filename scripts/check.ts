@@ -48,7 +48,6 @@ for (const bad of [
   { ...valid, rpe: 0 },
   { ...valid, rpe: 11 },
   { ...valid, rpe: "hard" },
-  { ...valid, isWarmup: "yes" },
 ]) {
   assert.throws(
     () => parseSetInput(bad),
@@ -56,11 +55,11 @@ for (const bad of [
   );
 }
 
-// Cardio: a duration replaces weight × reps; reps and weight are stored as 0, never a warm-up.
+// Cardio: a duration replaces weight × reps; reps and weight are stored as 0.
 assert.equal(parsed.durationSeconds, null);
 assert.equal(parsed.distanceKm, null);
-const cardio = parseSetInput({ ...valid, reps: undefined, weightKg: undefined, durationSeconds: 1676, distanceKm: 3.2, isWarmup: true });
-assert.deepEqual([cardio.reps, cardio.weightKg, cardio.durationSeconds, cardio.distanceKm, cardio.isWarmup], [0, "0.00", 1676, "3.20", false]);
+const cardio = parseSetInput({ ...valid, reps: undefined, weightKg: undefined, durationSeconds: 1676, distanceKm: 3.2 });
+assert.deepEqual([cardio.reps, cardio.weightKg, cardio.durationSeconds, cardio.distanceKm], [0, "0.00", 1676, "3.20"]);
 assert.equal(parseSetInput({ ...valid, durationSeconds: 60, distanceKm: "" }).distanceKm, null);
 for (const bad of [
   { ...valid, durationSeconds: 0 },
@@ -85,14 +84,12 @@ assert.equal(formatSetLoad({ reps: 0, weightKg: "0.00", durationSeconds: 978, di
 assert.equal(formatSetLoad({ reps: 0, weightKg: "0.00", durationSeconds: 978, distanceKm: null }), "16:18");
 assert.equal(formatSetLoad({ reps: 10, weightKg: "27.50", durationSeconds: null }), "27.5 kg × 10");
 
-const parsedMeta = parseSetInput({ ...valid, notes: "  hard  ", rpe: 7.5, isWarmup: true });
+const parsedMeta = parseSetInput({ ...valid, notes: "  hard  ", rpe: 7.5 });
 assert.equal(parsedMeta.notes, "hard");
 assert.equal(parsedMeta.rpe, "7.5");
-assert.equal(parsedMeta.isWarmup, true);
 
 assert.equal(parseSetInput(valid).notes, null);
 assert.equal(parseSetInput(valid).rpe, null);
-assert.equal(parseSetInput(valid).isWarmup, false);
 assert.equal(parseSetInput({ ...valid, rpe: "" }).rpe, null);
 
 assert.equal(parseSetInput(valid).workoutId, undefined);
@@ -169,14 +166,6 @@ for (const bad of [
 const summary = summariseSession([
   { exerciseId: "a", exerciseName: "Bench", exerciseType: "barbell", weightKg: "100.00", reps: 5 },
   { exerciseId: "a", exerciseName: "Bench", exerciseType: "barbell", weightKg: 105, reps: 3 },
-  {
-    exerciseId: "a",
-    exerciseName: "Bench",
-    exerciseType: "barbell",
-    weightKg: 140,
-    reps: 20,
-    isWarmup: true,
-  },
   { exerciseId: "b", exerciseName: "Row", exerciseType: "barbell", weightKg: "60.00", reps: 10 },
 ]);
 assert.equal(summary.length, 2);
@@ -267,7 +256,6 @@ function aset(workout: string | null, day: number, weightKg: number, reps: numbe
     weightKg: weightKg.toFixed(2),
     reps,
     performedAt: new Date(Date.UTC(2026, 0, day, 10, 0, setSeq)),
-    isWarmup: false,
     ...extra,
   };
 }
@@ -282,20 +270,6 @@ function aset(workout: string | null, day: number, weightKg: number, reps: numbe
   assert.equal(single.analysis.target?.weightKg, 102.5);
   assert.equal(single.analysis.target?.reps, 8);
   assert.equal(analyseExercise({ equipment: "barbell", sets: [] }).analysis.target, null);
-}
-
-// Warm-ups are excluded: from records, from sessions and from the target.
-{
-  const sets = [
-    aset("w1", 1, 100, 5),
-    aset("w2", 2, 200, 5, { isWarmup: true }),
-    aset("w2", 2, 100, 5),
-    aset("w3", 3, 60, 10, { isWarmup: true }),
-  ];
-  const result = analyseExercise({ equipment: "barbell", sets });
-  assert.equal(result.records.length, 0);
-  assert.equal(result.analysis.sessions, 2);
-  assert.equal(result.analysis.bestValue, Math.round(e1rm(100, 5) * 100) / 100);
 }
 
 // Records: strictly better than every earlier session; ties are not records; one per session.

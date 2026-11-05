@@ -47,7 +47,7 @@ sooner (a nice-to-have, not needed).
 `personal_records` table (one row per PR set), whichever reads simpler. Contents:
 
 - Personal records: best estimated 1RM (reuse `e1rm` in `shared/progress.ts`, Epley) and best
-  weight at each rep count, flagged on the set that achieved it. Warm-up sets excluded.
+  weight at each rep count, flagged on the set that achieved it.
 - Plateau: no e1RM improvement on the exercise in the last N sessions (start N = 4).
 - Next-session target: double progression. If every working set last time hit the top of the
   rep range, add a weight increment (per equipment type, see `shared/equipment.ts`); otherwise
@@ -71,7 +71,7 @@ heartbeat; Railway restarts it on crash.
       inside the existing transactions in the routes listed above. Routes that don't use a
       transaction yet get one.
 - [x] 3. `shared/analysis.ts`: PRs, plateau and target as pure functions, with assert cases in
-      `scripts/check.ts` (ties, warm-ups excluded, bodyweight exercises at 0 kg, a single
+      `scripts/check.ts` (ties, bodyweight exercises at 0 kg, a single
       session, rep-range edges).
 - [x] 4. Worker: claim loop, recompute per exercise, backoff and dead-letter, SIGTERM handling.
 - [x] 5. Replay script.

@@ -30,11 +30,7 @@ export default defineEventHandler(async (event) => {
   const tz = typeof query.tz === "string" && query.tz ? query.tz : "UTC";
   if (!isTimeZone(tz)) throw createError({ statusCode: 400, statusMessage: "Invalid timezone" });
 
-  const range = and(
-    gte(sets.performedAt, from),
-    lt(sets.performedAt, to),
-    eq(sets.isWarmup, false),
-  );
+  const range = and(gte(sets.performedAt, from), lt(sets.performedAt, to));
 
   const week = sql<string>`to_char(date_trunc('week', ${sets.performedAt} AT TIME ZONE ${tz}), 'YYYY-MM-DD')`;
   const localDay = sql<string>`to_char(${sets.performedAt} AT TIME ZONE ${tz}, 'YYYY-MM-DD')`;
@@ -61,7 +57,7 @@ export default defineEventHandler(async (event) => {
     db
       .select({ day: localDay })
       .from(sets)
-      .where(and(lt(sets.performedAt, to), eq(sets.isWarmup, false)))
+      .where(lt(sets.performedAt, to))
       .groupBy(sql`1`)
       .orderBy(sql`1 desc`)
       .limit(366), // shortcut: streak sees at most the last 366 training days

@@ -19,7 +19,6 @@ interface SetRow {
   rpe: string | null;
   durationSeconds: number | null;
   distanceKm: string | null;
-  isWarmup: boolean;
 }
 
 interface Analysis {
@@ -63,30 +62,29 @@ const recordsBySet = computed(() => {
 
 const rows = computed(() => data.value?.sets ?? []);
 const recent = computed(() => [...rows.value].reverse());
-const workingSets = computed(() => rows.value.filter((row) => !row.isWarmup));
-const days = computed(() => dayStats(workingSets.value));
+const days = computed(() => dayStats(rows.value));
 
 const bestSet = computed(() => {
   let best: SetRow | null = null;
-  for (const row of workingSets.value) {
+  for (const row of rows.value) {
     if (!best || Number(row.weightKg) > Number(best.weightKg)) best = row;
   }
   return best;
 });
 
 const bestE1rm = computed(() =>
-  workingSets.value.reduce((max, row) => Math.max(max, e1rm(Number(row.weightKg), row.reps)), 0),
+  rows.value.reduce((max, row) => Math.max(max, e1rm(Number(row.weightKg), row.reps)), 0),
 );
 const totalVolume = computed(() =>
-  workingSets.value.reduce((sum, row) => sum + Number(row.weightKg) * row.reps, 0),
+  rows.value.reduce((sum, row) => sum + Number(row.weightKg) * row.reps, 0),
 );
-const lastSet = computed(() => workingSets.value.at(-1) ?? null);
+const lastSet = computed(() => rows.value.at(-1) ?? null);
 
 // Cardio: time and distance instead of load. One point per local day, summing that day's entries.
 const cardio = computed(() => isCardio(data.value?.exercise.type));
 const cardioDays = computed(() => {
   const byDay = new Map<string, { date: Date; seconds: number }>();
-  for (const row of workingSets.value) {
+  for (const row of rows.value) {
     const at = new Date(row.performedAt);
     const key = localDayKey(at);
     const day = byDay.get(key) ?? { date: new Date(at.getFullYear(), at.getMonth(), at.getDate()), seconds: 0 };
@@ -95,11 +93,11 @@ const cardioDays = computed(() => {
   }
   return [...byDay.values()].sort((a, b) => a.date.getTime() - b.date.getTime());
 });
-const totalSeconds = computed(() => workingSets.value.reduce((sum, row) => sum + (row.durationSeconds ?? 0), 0));
+const totalSeconds = computed(() => rows.value.reduce((sum, row) => sum + (row.durationSeconds ?? 0), 0));
 const longestSeconds = computed(() =>
-  workingSets.value.reduce((max, row) => Math.max(max, row.durationSeconds ?? 0), 0),
+  rows.value.reduce((max, row) => Math.max(max, row.durationSeconds ?? 0), 0),
 );
-const totalDistance = computed(() => workingSets.value.reduce((sum, row) => sum + Number(row.distanceKm ?? 0), 0));
+const totalDistance = computed(() => rows.value.reduce((sum, row) => sum + Number(row.distanceKm ?? 0), 0));
 const sessionCount = computed(() => (cardio.value ? cardioDays.value.length : days.value.length));
 
 function round(value: number) {
@@ -275,7 +273,6 @@ const chart = computed(() => {
             <div class="set-line">
               <span class="set-name">{{ formatSetLoad(row) }}</span>
               <span v-if="row.rpe" class="tag">RPE {{ Number(row.rpe) }}</span>
-              <span v-if="row.isWarmup" class="tag">warmup</span>
               <span v-for="pr in recordsBySet.get(row.id) ?? []" :key="pr.kind" class="tag pr">
                 {{ recordLabel(pr.kind, pr.reps) }}
               </span>

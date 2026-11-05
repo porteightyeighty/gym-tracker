@@ -15,7 +15,6 @@ export default defineEventHandler(async (event) => {
       rpe: sets.rpe,
       durationSeconds: sets.durationSeconds,
       distanceKm: sets.distanceKm,
-      isWarmup: sets.isWarmup,
       notes: sets.notes,
       workoutStartedAt: workouts.startedAt,
     })
@@ -36,7 +35,6 @@ export default defineEventHandler(async (event) => {
       "duration_seconds",
       "distance_km",
       "rpe",
-      "is_warmup",
       "notes",
       "workout_started_at",
     ],
@@ -51,7 +49,6 @@ export default defineEventHandler(async (event) => {
       row.durationSeconds ?? "",
       row.distanceKm ?? "",
       row.rpe ?? "",
-      row.isWarmup,
       row.notes ?? "",
       row.workoutStartedAt?.toISOString() ?? "",
     ]),

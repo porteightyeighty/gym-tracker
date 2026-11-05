@@ -11,7 +11,6 @@ export interface SetInput {
   performedAt: Date;
   notes: string | null;
   rpe: string | null;
-  isWarmup: boolean;
   durationSeconds: number | null;
   distanceKm: string | null;
 }
@@ -81,11 +80,6 @@ export function parseSetInput(body: any): SetInput {
     rpe = value.toFixed(1);
   }
 
-  const isWarmup = body?.isWarmup ?? false;
-  if (typeof isWarmup !== "boolean") {
-    throw createError({ statusCode: 400, statusMessage: "isWarmup must be a boolean" });
-  }
-
   return {
     exerciseId,
     workoutId: isUuid(workoutId) ? workoutId : undefined,
@@ -94,7 +88,6 @@ export function parseSetInput(body: any): SetInput {
     performedAt,
     notes,
     rpe,
-    isWarmup: cardio ? false : isWarmup,
     durationSeconds,
     distanceKm,
   };
