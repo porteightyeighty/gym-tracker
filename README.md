@@ -3,7 +3,8 @@
 A workout log I use myself, live at [gym.mattport.com](https://gym.mattport.com). It records sets,
 sessions, routines and body weight, and shows progress per exercise and week by week.
 
-<!-- TODO(Matt): one or two sentences on why you built it rather than using an existing app. -->
+I built it to keep my training data under my own control instead of on a paid service that
+makes use of my health data.
 
 Nuxt 4 (Vue 3) and Nitro, Postgres with Drizzle, Better Auth. Deployed on Railway as the web app
 plus a small analysis worker, sharing one database.
@@ -92,8 +93,9 @@ rather than on every navigation. Page fetches and the stats queries run in paral
 through drizzle-orm's migrator in Railway's pre-deploy step, so a failed migration stops the
 deploy with a visible error.
 
-<!-- TODO(Matt): why Nuxt, Drizzle and Better Auth over the alternatives you considered, if
-     there's a real reason. Skip it if there isn't. -->
+**A familiar stack.** I chose Nuxt because I already knew Vue, and Drizzle because it is a
+straightforward way to get from TypeScript to Postgres: the schema is code, and queries read close
+to the SQL they produce.
 
 ### Left out deliberately
 
