@@ -91,7 +91,7 @@ heartbeat; Railway restarts it on crash.
 - [ ] 9. Tracing (stretch): OpenTelemetry on the web request and the worker, with the trace
       context stored in the outbox row so one trace spans request → event → analysis. Railway
       supports OTLP.
-- [ ] 10. Deploy the worker service on Railway, run replay once, then update the README
+- [x] 10. Deploy the worker service on Railway, run replay once, then update the README
       (Decisions: outbox, consumer is a function of current data, Postgres as queue; Running:
       worker and replay commands) and AGENTS.md.
 
@@ -107,26 +107,22 @@ heartbeat; Railway restarts it on crash.
 - Only finished sessions (and sets outside any workout) feed analyses; workout-less sets group
   into sessions by a 3-hour gap rather than by a timezone-dependent day.
 - Step 7 tests drive the built server over HTTP; the crash test SIGKILLs a real child worker.
-- Remaining: 9 (tracing, stretch) and 10 (deploy the worker service, run replay once).
+- Remaining: 9 (tracing, stretch) and deleting the old `mattport.com` resources.
 
 ## Step 10: move to a dedicated `gym` Railway project
 
 The gym services were in the shared `mattport.com` project next to unrelated apps (edge, r2l,
-cv). Railway IaC is project-scoped, so they move to their own project, `gym`
+cv). Railway IaC is project-scoped, so they moved to their own project, `gym`
 (f5e4b749-8831-455b-bdb6-5fbbd6d0e243), described by `.railway/railway.ts`. Railway can't move a
-service between projects, so it is a rebuild plus a data copy.
+service between projects, so it was a rebuild; the data was re-imported from a CSV export rather
+than restored from a dump.
 
-- [x] Create the empty `gym` project; `railway config plan` shows 3 to add (GymDB, web, worker).
-- [ ] Push this code to `main` (the old service redeploys and applies migration 0005; harmless).
-- [ ] Dump the old GymDB from inside its container (it has no public proxy):
-      `railway ssh -p ffb3660a-6a2c-42fe-a3c2-423f701ce95c -s GymDB -- sh -c 'pg_dump --no-owner
-      --no-acl -U "$PGUSER" -d "$PGDATABASE"' > gym.sql`. It contains the password hash: delete it after.
-- [ ] Apply GymDB only, restore the dump into it before `web` first runs its migrations.
-- [ ] Copy `BETTER_AUTH_SECRET` (same value keeps the login valid), `SEED_EMAIL`, `SEED_PASSWORD`
-      to the new `web` service.
-- [ ] Apply `web` and `worker`, then `npm run analyses:replay` against the new database.
-- [ ] Cut over: remove `gym.mattport.com` from the old service, add `domains: ["gym.mattport.com"]`
-      to `web`, update the DNS record. A few minutes of downtime.
+- [x] Create the `gym` project; apply GymDB and its volume (pinned to europe-west4: on create
+      Railway ignored the database's region and put the volume in sfo).
+- [x] Apply `web` and `worker`; set `BETTER_AUTH_SECRET` (fresh), `SEED_EMAIL`, `SEED_PASSWORD`.
+- [x] Import the workout history (4 workouts, 70 sets) with one `history_changed` event, then
+      `npm run analyses:replay` after the 8–12 default rep range change.
+- [x] Cut over `gym.mattport.com` to the new `web` (domain now declared in the file).
 - [ ] Confirm backups on the new Postgres, then delete the old gym-tracker, GymDB and its volume
       from `mattport.com`.
 

@@ -25,7 +25,7 @@ Nuxt 4 + Postgres + Drizzle, deliberately single-user. Two Railway services from
 - `exercise_analyses` and `personal_records` are derived: only `worker/process.ts` writes them, always by recomputing an exercise from all its sets. Never update them from a route. Rules live in `shared/analysis.ts`; after changing one, run the replay.
 - `worker/`, `scripts/` and `tests/` run under plain Node: relative `.ts` imports, no auto-imports, import schema from `../server/utils/schema.ts`.
 - Timestamps are `timestamptz` stored in UTC. Day/week grouping uses the browser timezone (`tz` query on `/api/stats`, `localDayKey`, `dayKeyInZone`) — never group by UTC dates.
-- Railway: `.railway/railway.ts` is the `gym` project as code (IaC, `railway config plan|apply`). Applying deletes anything removed from the file; always plan first. Mid-migration from the shared `mattport.com` project (see `PLAN.md`, step 10) — never point this file at `mattport.com`.
+- Railway: `.railway/railway.ts` is the `gym` project as code (IaC, `railway config plan|apply`). Applying deletes anything removed from the file; always plan first. Never point this file at the shared `mattport.com` project.
 - Env: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (see `.env.example`). Nuxt loads `.env` itself; scripts use `node --env-file-if-exists=.env`.
 
 ## Git conventions

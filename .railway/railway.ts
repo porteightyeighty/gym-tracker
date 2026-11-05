@@ -23,6 +23,7 @@ export default defineRailway(() => {
     source: REPO,
     build: { buildEnvironment: "V3", builder: "RAILPACK" },
     healthcheck: "/login",
+    domains: ["gym.mattport.com"],
     preDeploy: "npm run db:migrate && npm run seed",
     replicas: { [REGION]: 1 },
     env: {
