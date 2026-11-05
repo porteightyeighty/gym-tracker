@@ -23,7 +23,14 @@ plus a small analysis worker, sharing one database.
 - **History.** Edit or delete past sessions.
 - **Body weight log and CSV export** of everything.
 
-<!-- TODO(3.2): screenshots or a short clip here. -->
+<p>
+  <img src="docs/screenshots/routines.png" width="200" alt="Home: start an empty workout or one of three routines">
+  <img src="docs/screenshots/workout.png" width="200" alt="Logging a set, with the next-session target and a rest timer">
+  <img src="docs/screenshots/exercise.png" width="200" alt="Exercise page: best set, next-session target and a plateau note">
+  <img src="docs/screenshots/stats.png" width="200" alt="Stats: totals, weekly volume and sets by equipment">
+</p>
+
+<sub>Screenshots use made-up data (<code>npm run demo:data</code>), not my own.</sub>
 
 ## Decisions
 
