@@ -70,7 +70,7 @@ worker's heartbeat. No Kafka or RabbitMQ; `LISTEN/NOTIFY` would wake it sooner b
 - *Next-session target:* double progression from the last session. If every set at its top weight
   reached the top of the rep range, add one increment (barbell/cable 2.5 kg, dumbbell 2 kg, machine
   5 kg) and drop to the bottom of the range; otherwise keep the weight and aim for one more rep.
-  The range is the routine's target reps and three below, or 5–8 outside a routine. Suggestions are
+  The range is the routine's target reps and three below, or 8–12 outside a routine. Suggestions are
   only shown, never written back into routines.
 
 **Every data route starts with `requireSession`.** One guard, applied first, so an endpoint can't
@@ -106,8 +106,8 @@ deploy with a visible error.
   the query to one round trip.
 - PR badges and targets appear once the worker has run (seconds), not the moment a set is logged.
   If the worker is down, logging still works and analyses catch up when it restarts.
-- The default 5–8 rep range suits compound lifts; outside a routine it gives low-rep targets for
-  high-rep accessories.
+- The default 8–12 rep range suits machine and accessory work; outside a routine it gives high-rep
+  targets for heavy compound lifts.
 
 ## Running it
 

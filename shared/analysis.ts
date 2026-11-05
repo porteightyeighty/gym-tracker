@@ -7,7 +7,7 @@ import { weightIncrement } from "./equipment.ts";
 import { e1rm } from "./progress.ts";
 
 export const PLATEAU_SESSIONS = 4;
-export const DEFAULT_REP_RANGE: RepRange = [5, 8];
+export const DEFAULT_REP_RANGE: RepRange = [8, 12];
 /** Sets outside a workout (legacy, or logged with no session open) this close together form one session. */
 export const LOOSE_SESSION_GAP_MS = 3 * 60 * 60 * 1000;
 
@@ -209,7 +209,7 @@ export function plateauStatus(sessions: Session[], mode: AnalysisMode, n = PLATE
   return { bestValue: best as number | null, sessionsSinceBest, plateau: sessionsSinceBest >= n };
 }
 
-/** A routine's target reps is the top of the range, three below it the bottom; otherwise 5–8. */
+/** A routine's target reps is the top of the range, three below it the bottom; otherwise 8–12. */
 export function repRangeFor(routineTargetReps: number | null | undefined): RepRange {
   if (!routineTargetReps || routineTargetReps < 1) return DEFAULT_REP_RANGE;
   return [Math.max(1, routineTargetReps - 3), routineTargetReps];

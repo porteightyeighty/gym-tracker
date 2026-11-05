@@ -98,7 +98,7 @@ heartbeat; Railway restarts it on crash.
 ## Decisions taken while implementing
 
 - Rep range: the routine's `target_reps` is the top of the range and three below it the bottom
-  when the last session came from a routine; otherwise 5–8. Routine edits and deletes write
+  when the last session came from a routine; otherwise 8–12. Routine edits and deletes write
   `history_changed`, since they change that input. Suggestions are only shown, never written back.
 - PR badges are worker-only, as suggested below.
 - PRs are historical ("beat every earlier session at the time"), not just the current all-time

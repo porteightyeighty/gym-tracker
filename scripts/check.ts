@@ -244,13 +244,13 @@ function aset(workout: string | null, day: number, weightKg: number, reps: numbe
 
 // A single session: a baseline with no records, no plateau, and a target.
 {
-  const single = analyseExercise({ equipment: "barbell", sets: [aset("w1", 1, 100, 8), aset("w1", 1, 100, 8)] });
+  const single = analyseExercise({ equipment: "barbell", sets: [aset("w1", 1, 100, 12), aset("w1", 1, 100, 12)] });
   assert.equal(single.records.length, 0);
   assert.equal(single.analysis.sessions, 1);
   assert.equal(single.analysis.plateau, false);
   assert.equal(single.analysis.sessionsSinceBest, 0);
   assert.equal(single.analysis.target?.weightKg, 102.5);
-  assert.equal(single.analysis.target?.reps, 5);
+  assert.equal(single.analysis.target?.reps, 8);
   assert.equal(analyseExercise({ equipment: "barbell", sets: [] }).analysis.target, null);
 }
 
@@ -320,7 +320,7 @@ function aset(workout: string | null, day: number, weightKg: number, reps: numbe
 
 // Double progression and rep-range edges.
 {
-  assert.deepEqual(repRangeFor(null), [5, 8]);
+  assert.deepEqual(repRangeFor(null), [8, 12]);
   assert.deepEqual(repRangeFor(10), [7, 10]);
   assert.deepEqual(repRangeFor(2), [1, 2]);
   const at = (...reps: number[]) => groupSessions(reps.map((r) => aset("x", 1, 60, r)))[0]!;
