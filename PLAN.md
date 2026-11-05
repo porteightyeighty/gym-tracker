@@ -107,7 +107,7 @@ heartbeat; Railway restarts it on crash.
 - Only finished sessions (and sets outside any workout) feed analyses; workout-less sets group
   into sessions by a 3-hour gap rather than by a timezone-dependent day.
 - Step 7 tests drive the built server over HTTP; the crash test SIGKILLs a real child worker.
-- Remaining: 9 (tracing, stretch) and deleting the old `mattport.com` resources.
+- Remaining: 9 (tracing, stretch).
 
 ## Step 10: move to a dedicated `gym` Railway project
 
@@ -123,7 +123,7 @@ than restored from a dump.
 - [x] Import the workout history (4 workouts, 70 sets) with one `history_changed` event, then
       `npm run analyses:replay` after the 8–12 default rep range change.
 - [x] Cut over `gym.mattport.com` to the new `web` (domain now declared in the file).
-- [ ] Confirm backups on the new Postgres, then delete the old gym-tracker, GymDB and its volume
+- [x] Delete the old gym-tracker, GymDB and its volume
       from `mattport.com`.
 
 ## Open questions
