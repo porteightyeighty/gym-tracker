@@ -9,7 +9,8 @@ import {
   ComboboxRoot,
   ComboboxViewport,
 } from "reka-ui";
-import { EQUIPMENT } from "~~/shared/equipment";
+import { EQUIPMENT, isCardio } from "~~/shared/equipment";
+import { formatDuration, formatSetLoad, parseDuration } from "~~/shared/cardio";
 import { formatTarget } from "~~/shared/routines";
 import { formatSuggestion, recordLabel } from "~~/shared/analysis";
 import { authClient } from "~~/lib/auth-client";
@@ -24,6 +25,8 @@ interface SetRow {
   notes: string | null;
   rpe: string | null;
   isWarmup: boolean;
+  durationSeconds: number | null;
+  distanceKm: string | null;
   exerciseName: string;
   exerciseType: string;
   workoutStartedAt: string | null;
@@ -73,6 +76,8 @@ interface Exercise {
 interface LastSet {
   reps: number;
   weightKg: string;
+  durationSeconds: number | null;
+  distanceKm: string | null;
   performedAt: string;
 }
 
@@ -125,12 +130,15 @@ watch(
 const form = reactive({
   weightKg: "",
   reps: "",
+  duration: "",
+  distanceKm: "",
   notes: "",
   rpe: "",
   isWarmup: false,
   performedAt: nowLocal(),
 });
 const selectedExercise = ref<Exercise | null>(null);
+const cardioSelected = computed(() => isCardio(selectedExercise.value?.type));
 const editingId = ref<string | null>(null);
 const lastSet = ref<LastSet | null>(null);
 const analysis = ref<Analysis | null>(null);
@@ -304,12 +312,18 @@ async function prefillLast() {
   const [last, derived] = await Promise.all([
     requestFetch<LastSet | null>(`/api/exercises/${id}/last-set`),
     // Worker-derived and optional: logging must not fail because the analysis is missing.
-    requestFetch<{ analysis: Analysis | null }>(`/api/exercises/${id}/analysis`).catch(() => null),
+    // Cardio is never analysed, so don't ask.
+    cardioSelected.value
+      ? null
+      : requestFetch<{ analysis: Analysis | null }>(`/api/exercises/${id}/analysis`).catch(() => null),
   ]);
   if (selectedExercise.value?.id !== id || editingId.value) return;
   lastSet.value = last;
   analysis.value = derived?.analysis ?? null;
-  if (last) {
+  if (last?.durationSeconds != null) {
+    form.duration = formatDuration(last.durationSeconds);
+    form.distanceKm = last.distanceKm ? String(Number(last.distanceKm)) : "";
+  } else if (last) {
     form.weightKg = String(Number(last.weightKg));
     form.reps = String(last.reps);
   }
@@ -320,6 +334,8 @@ watch(selectedExercise, prefillLast);
 function resetForm() {
   form.weightKg = "";
   form.reps = "";
+  form.duration = "";
+  form.distanceKm = "";
   form.notes = "";
   form.rpe = "";
   form.isWarmup = false;
@@ -342,12 +358,19 @@ async function saveSet() {
     error.value = "Pick an exercise";
     return;
   }
+  const cardio = cardioSelected.value;
+  const durationSeconds = cardio ? parseDuration(form.duration) : null;
+  if (cardio && durationSeconds === null) {
+    error.value = "Duration as mm:ss, h:mm:ss or minutes";
+    return;
+  }
   busy.value = true;
   const intoTarget = editingId.value ? null : logTarget.value;
   const body = {
     exerciseId: selectedExercise.value.id,
-    weightKg: Number(form.weightKg),
-    reps: Number(form.reps),
+    ...(cardio
+      ? { durationSeconds, distanceKm: form.distanceKm === "" ? null : Number(form.distanceKm) }
+      : { weightKg: Number(form.weightKg), reps: Number(form.reps) }),
     notes: form.notes.trim() || null,
     rpe: form.rpe === "" ? null : Number(form.rpe),
     isWarmup: form.isWarmup,
@@ -367,7 +390,7 @@ async function saveSet() {
       await loadTargetRows();
       form.performedAt = nextPerformedAt();
     } else {
-      if (!wasEditing && !form.isWarmup) startRest();
+      if (!wasEditing && !form.isWarmup && !cardio) startRest();
       form.performedAt = nowLocal();
       await refreshSets();
     }
@@ -383,6 +406,8 @@ function startEdit(row: SetRow) {
   selectedExercise.value = { id: row.exerciseId, name: row.exerciseName, type: row.exerciseType };
   form.weightKg = String(Number(row.weightKg));
   form.reps = String(row.reps);
+  form.duration = row.durationSeconds != null ? formatDuration(row.durationSeconds) : "";
+  form.distanceKm = row.distanceKm ? String(Number(row.distanceKm)) : "";
   form.notes = row.notes ?? "";
   form.rpe = row.rpe ? String(Number(row.rpe)) : "";
   form.isWarmup = row.isWarmup;
@@ -627,9 +652,7 @@ function timeOf(value: string) {
           </template>
         </ComboboxRoot>
 
-        <p v-if="lastSet && !editingId" class="muted">
-          Last: {{ Number(lastSet.weightKg) }} kg × {{ lastSet.reps }}
-        </p>
+        <p v-if="lastSet && !editingId" class="muted">Last: {{ formatSetLoad(lastSet) }}</p>
         <p
           v-if="analysis?.targetReps && !editingId"
           class="muted suggestion"
@@ -642,7 +665,34 @@ function timeOf(value: string) {
           Plateau: no new best in {{ analysis.sessionsSinceBest }} sessions.
         </p>
 
-        <div class="big-inputs">
+        <div v-if="cardioSelected" class="big-inputs">
+          <div class="big-field">
+            <label for="duration">Duration</label>
+            <input
+              id="duration"
+              v-model="form.duration"
+              type="text"
+              inputmode="numeric"
+              placeholder="mm:ss"
+              autocomplete="off"
+              required
+            />
+          </div>
+          <div class="big-field">
+            <label for="distance">Distance km</label>
+            <input
+              id="distance"
+              v-model="form.distanceKm"
+              type="number"
+              inputmode="decimal"
+              step="0.01"
+              min="0"
+              placeholder="optional"
+            />
+          </div>
+        </div>
+
+        <div v-else class="big-inputs">
           <div class="big-field">
             <label for="weight">Weight kg</label>
             <input
@@ -677,7 +727,7 @@ function timeOf(value: string) {
           </div>
         </div>
 
-        <div class="card-head">
+        <div v-if="!cardioSelected" class="card-head">
           <label class="toggle">
             <input v-model="form.isWarmup" type="checkbox" />
             Warmup
@@ -689,7 +739,7 @@ function timeOf(value: string) {
 
         <p v-if="error" class="error">{{ error }}</p>
         <button type="submit" class="primary block log-btn" :disabled="busy">
-          {{ busy ? "Saving…" : editingId ? "Save changes" : "Log set" }}
+          {{ busy ? "Saving…" : editingId ? "Save changes" : cardioSelected ? "Log cardio" : "Log set" }}
         </button>
 
         <details
@@ -735,7 +785,7 @@ function timeOf(value: string) {
           <div v-for="row in sessionRows" :key="row.id" class="set-row">
             <div class="set-line">
               <span class="set-name">{{ row.exerciseName }}</span>
-              <span class="set-load">{{ Number(row.weightKg) }} kg × {{ row.reps }}</span>
+              <span class="set-load">{{ formatSetLoad(row) }}</span>
             </div>
             <div class="set-sub">
               <span>{{ timeOf(row.performedAt) }}</span>

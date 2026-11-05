@@ -20,6 +20,8 @@ export default defineEventHandler(async (event) => {
       performedAt: sets.performedAt,
       notes: sets.notes,
       rpe: sets.rpe,
+      durationSeconds: sets.durationSeconds,
+      distanceKm: sets.distanceKm,
       isWarmup: sets.isWarmup,
     })
     .from(sets)

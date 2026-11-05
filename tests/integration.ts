@@ -250,6 +250,39 @@ test("bodyweight exercise: rep records and a +1 rep target", async () => {
   assert.equal(body.analysis.targetReps, 11);
 });
 
+test("cardio is logged as a duration and never analysed", async () => {
+  const list = await api<{ id: string; name: string }[]>("/api/exercises");
+  const treadmill = list.body.find((e) => e.name === "Treadmill")!.id;
+  const at = new Date(Date.now() - 8 * 86_400_000);
+  const workout = await api("/api/workouts", { method: "POST", body: { startedAt: at.toISOString() } });
+
+  // Each kind of exercise takes only its own shape of entry.
+  const strengthOnCardio = await api("/api/sets", {
+    method: "POST",
+    body: { exerciseId: treadmill, weightKg: 0, reps: 10, performedAt: at.toISOString(), workoutId: workout.body.id },
+  });
+  assert.equal(strengthOnCardio.status, 400);
+  const durationOnStrength = await api("/api/sets", {
+    method: "POST",
+    body: { exerciseId: bench, durationSeconds: 600, performedAt: at.toISOString(), workoutId: workout.body.id },
+  });
+  assert.equal(durationOnStrength.status, 400);
+
+  const run = await api("/api/sets", {
+    method: "POST",
+    body: { exerciseId: treadmill, durationSeconds: 1676, distanceKm: 3.2, performedAt: at.toISOString(), workoutId: workout.body.id },
+  });
+  assert.equal(run.status, 200);
+  assert.deepEqual([run.body.reps, run.body.weightKg, run.body.durationSeconds, run.body.distanceKm], [0, "0.00", 1676, "3.20"]);
+  await api(`/api/workouts/${workout.body.id}`, { method: "PATCH", body: { endedAt: new Date(at.getTime() + 3_600_000).toISOString() } });
+
+  await drain(db, quiet);
+  const { body } = await api(`/api/exercises/${treadmill}/analysis`);
+  assert.deepEqual(body, { analysis: null, records: [] });
+  const page = await api(`/api/sets?workoutId=${workout.body.id}`);
+  assert.equal(page.body.items[0].durationSeconds, 1676);
+});
+
 test("processing the same event twice gives the same analyses", async () => {
   await drain(db, quiet);
   const first = await snapshot();

@@ -119,6 +119,9 @@ export const sets = pgTable(
     performedAt: timestamp("performed_at", { withTimezone: true }).notNull(),
     notes: text("notes"),
     rpe: numeric("rpe", { precision: 3, scale: 1 }),
+    // Cardio entries only (exercise type "cardio"): duration is required there, reps and weight are 0.
+    durationSeconds: integer("duration_seconds"),
+    distanceKm: numeric("distance_km", { precision: 7, scale: 2 }),
     isWarmup: boolean("is_warmup").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

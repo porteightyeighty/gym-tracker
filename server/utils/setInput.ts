@@ -1,4 +1,5 @@
 import { createError } from "h3";
+import { MAX_DURATION_SECONDS } from "../../shared/cardio.ts";
 
 const MAX_NOTES = 500;
 
@@ -11,6 +12,8 @@ export interface SetInput {
   notes: string | null;
   rpe: string | null;
   isWarmup: boolean;
+  durationSeconds: number | null;
+  distanceKm: string | null;
 }
 
 export function isUuid(value: unknown): value is string {
@@ -20,8 +23,11 @@ export function isUuid(value: unknown): value is string {
 export function parseSetInput(body: any): SetInput {
   const exerciseId = typeof body?.exerciseId === "string" ? body.exerciseId : "";
   const workoutId = body?.workoutId;
-  const reps = Number(body?.reps);
-  const weightKg = Number(body?.weightKg);
+  // A duration makes this a cardio entry: reps and weight are stored as 0 and not validated.
+  // Whether the exercise really is cardio is checked against the database by the route.
+  const cardio = body?.durationSeconds !== undefined && body?.durationSeconds !== null;
+  const reps = cardio ? 0 : Number(body?.reps);
+  const weightKg = cardio ? 0 : Number(body?.weightKg);
   const performedAt = new Date(body?.performedAt);
 
   if (!isUuid(exerciseId)) {
@@ -30,7 +36,21 @@ export function parseSetInput(body: any): SetInput {
   if (workoutId !== undefined && workoutId !== null && !isUuid(workoutId)) {
     throw createError({ statusCode: 400, statusMessage: "Invalid workout" });
   }
-  if (!Number.isInteger(reps) || reps < 1 || reps > 1000) {
+  let durationSeconds: number | null = null;
+  let distanceKm: string | null = null;
+  if (cardio) {
+    durationSeconds = Number(body.durationSeconds);
+    if (!Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > MAX_DURATION_SECONDS) {
+      throw createError({ statusCode: 400, statusMessage: "Duration must be between 1 second and 24 hours" });
+    }
+    if (body?.distanceKm !== undefined && body?.distanceKm !== null && body?.distanceKm !== "") {
+      const distance = Number(body.distanceKm);
+      if (!Number.isFinite(distance) || distance < 0 || distance > 1000) {
+        throw createError({ statusCode: 400, statusMessage: "Distance must be between 0 and 1000 km" });
+      }
+      distanceKm = distance.toFixed(2);
+    }
+  } else if (!Number.isInteger(reps) || reps < 1 || reps > 1000) {
     throw createError({ statusCode: 400, statusMessage: "Reps must be a positive integer" });
   }
   if (!Number.isFinite(weightKg) || weightKg < 0 || weightKg > 9999) {
@@ -74,7 +94,9 @@ export function parseSetInput(body: any): SetInput {
     performedAt,
     notes,
     rpe,
-    isWarmup,
+    isWarmup: cardio ? false : isWarmup,
+    durationSeconds,
+    distanceKm,
   };
 }
 

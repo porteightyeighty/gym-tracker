@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 export default defineEventHandler(async (event) => {
   await requireSession(event);
   const input = parseSetInput(await readBody(event));
+  await assertSetMatchesExercise(input);
 
   // A set lands in finished history (and so changes analyses) unless it joins an open workout.
   let intoHistory = false;

@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lt, ne, sql } from "drizzle-orm";
 import { dayKeyInZone, streak } from "~~/shared/stats";
 
 function queryDate(value: unknown, fallback: Date): Date {
@@ -47,14 +47,15 @@ export default defineEventHandler(async (event) => {
       sets: sql<number>`count(*)::int`,
     })
       .from(sets)
-      .where(range)
+      .innerJoin(exercises, eq(sets.exerciseId, exercises.id))
+      .where(and(range, ne(exercises.type, "cardio"))) // cardio has no sets or volume
       .groupBy(sql`1`)
       .orderBy(sql`1`),
     db
       .select({ type: exercises.type, sets: sql<number>`count(*)::int` })
       .from(sets)
       .innerJoin(exercises, eq(sets.exerciseId, exercises.id))
-      .where(range)
+      .where(and(range, ne(exercises.type, "cardio")))
       .groupBy(exercises.type)
       .orderBy(desc(sql`count(*)`)),
     db

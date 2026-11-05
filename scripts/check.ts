@@ -11,6 +11,7 @@ import { dayStats, e1rm } from "../shared/progress.ts";
 import { formatTarget, summariseSession } from "../shared/routines.ts";
 import { dayKeyInZone, streak } from "../shared/stats.ts";
 import { toCsv } from "../shared/csv.ts";
+import { formatDuration, formatSetLoad, parseDuration } from "../shared/cardio.ts";
 import {
   analyseExercise,
   groupSessions,
@@ -54,6 +55,35 @@ for (const bad of [
     (err: any) => err.statusCode === 400,
   );
 }
+
+// Cardio: a duration replaces weight × reps; reps and weight are stored as 0, never a warm-up.
+assert.equal(parsed.durationSeconds, null);
+assert.equal(parsed.distanceKm, null);
+const cardio = parseSetInput({ ...valid, reps: undefined, weightKg: undefined, durationSeconds: 1676, distanceKm: 3.2, isWarmup: true });
+assert.deepEqual([cardio.reps, cardio.weightKg, cardio.durationSeconds, cardio.distanceKm, cardio.isWarmup], [0, "0.00", 1676, "3.20", false]);
+assert.equal(parseSetInput({ ...valid, durationSeconds: 60, distanceKm: "" }).distanceKm, null);
+for (const bad of [
+  { ...valid, durationSeconds: 0 },
+  { ...valid, durationSeconds: 1.5 },
+  { ...valid, durationSeconds: 24 * 3600 + 1 },
+  { ...valid, durationSeconds: "long" },
+  { ...valid, durationSeconds: 60, distanceKm: -1 },
+  { ...valid, durationSeconds: 60, distanceKm: "far" },
+]) {
+  assert.throws(() => parseSetInput(bad), (err: any) => err.statusCode === 400);
+}
+
+assert.equal(parseDuration("27:56"), 1676);
+assert.equal(parseDuration(" 1:02:03 "), 3723);
+assert.equal(parseDuration("28"), 1680);
+assert.equal(parseDuration("2.5"), 150);
+for (const bad of ["", "0", "0:00", "1:60", "abc", "1:2", "-5", "25:00:00"]) assert.equal(parseDuration(bad), null, bad);
+assert.equal(formatDuration(1676), "27:56");
+assert.equal(formatDuration(3723), "1:02:03");
+assert.equal(formatDuration(59), "0:59");
+assert.equal(formatSetLoad({ reps: 0, weightKg: "0.00", durationSeconds: 978, distanceKm: "3.20" }), "16:18 · 3.2 km");
+assert.equal(formatSetLoad({ reps: 0, weightKg: "0.00", durationSeconds: 978, distanceKm: null }), "16:18");
+assert.equal(formatSetLoad({ reps: 10, weightKg: "27.50", durationSeconds: null }), "27.5 kg × 10");
 
 const parsedMeta = parseSetInput({ ...valid, notes: "  hard  ", rpe: 7.5, isWarmup: true });
 assert.equal(parsedMeta.notes, "hard");

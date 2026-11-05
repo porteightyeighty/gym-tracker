@@ -43,6 +43,13 @@
       "when": 1793838509109,
       "tag": "0005_first_gauntlet",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793876783415,
+      "tag": "0006_sleepy_wolfsbane",
+      "breakpoints": true
     }
   ]
 }

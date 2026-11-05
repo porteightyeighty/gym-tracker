@@ -9,6 +9,7 @@
 import { and, asc, eq, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { analyseExercise } from "../shared/analysis.ts";
+import { isCardio } from "../shared/equipment.ts";
 import type { OutboxEvent } from "../shared/events.ts";
 import * as schema from "../server/utils/schema.ts";
 
@@ -44,6 +45,12 @@ export async function recomputeExercise(tx: Tx, exerciseId: string): Promise<voi
     .where(eq(exercises.id, exerciseId))
     .for("update");
   if (!exercise) return; // deleted: its derived rows went with it (ON DELETE CASCADE)
+  if (isCardio(exercise.type)) {
+    // No PRs or targets for cardio; clears rows left over if its type was changed.
+    await tx.delete(personalRecords).where(eq(personalRecords.exerciseId, exerciseId));
+    await tx.delete(exerciseAnalyses).where(eq(exerciseAnalyses.exerciseId, exerciseId));
+    return;
+  }
 
   // Finished history only: sets in an open workout count once it is finished.
   const rows = await tx

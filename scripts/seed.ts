@@ -74,6 +74,11 @@ const LIFTS: [string, string][] = [
   ["Chin-up", "bodyweight"],
   ["Hanging leg raise", "bodyweight"],
   ["Kettlebell swing", "other"],
+  ["Treadmill", "cardio"],
+  ["Exercise bike", "cardio"],
+  ["Rowing machine", "cardio"],
+  ["Cross trainer", "cardio"],
+  ["Stair climber", "cardio"],
 ];
 
 await db.insert(schema.exercises).values(LIFTS.map(([name, type]) => ({ name, type }))).onConflictDoNothing();

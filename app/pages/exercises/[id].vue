@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { dayStats, e1rm } from "~~/shared/progress";
+import { dayStats, e1rm, localDayKey } from "~~/shared/progress";
 import { formatSuggestion, recordLabel } from "~~/shared/analysis";
+import { formatDuration, formatSetLoad } from "~~/shared/cardio";
+import { isCardio } from "~~/shared/equipment";
 
 interface Exercise {
   id: string;
@@ -15,6 +17,8 @@ interface SetRow {
   performedAt: string;
   notes: string | null;
   rpe: string | null;
+  durationSeconds: number | null;
+  distanceKm: string | null;
   isWarmup: boolean;
 }
 
@@ -78,6 +82,26 @@ const totalVolume = computed(() =>
 );
 const lastSet = computed(() => workingSets.value.at(-1) ?? null);
 
+// Cardio: time and distance instead of load. One point per local day, summing that day's entries.
+const cardio = computed(() => isCardio(data.value?.exercise.type));
+const cardioDays = computed(() => {
+  const byDay = new Map<string, { date: Date; seconds: number }>();
+  for (const row of workingSets.value) {
+    const at = new Date(row.performedAt);
+    const key = localDayKey(at);
+    const day = byDay.get(key) ?? { date: new Date(at.getFullYear(), at.getMonth(), at.getDate()), seconds: 0 };
+    day.seconds += row.durationSeconds ?? 0;
+    byDay.set(key, day);
+  }
+  return [...byDay.values()].sort((a, b) => a.date.getTime() - b.date.getTime());
+});
+const totalSeconds = computed(() => workingSets.value.reduce((sum, row) => sum + (row.durationSeconds ?? 0), 0));
+const longestSeconds = computed(() =>
+  workingSets.value.reduce((max, row) => Math.max(max, row.durationSeconds ?? 0), 0),
+);
+const totalDistance = computed(() => workingSets.value.reduce((sum, row) => sum + Number(row.distanceKm ?? 0), 0));
+const sessionCount = computed(() => (cardio.value ? cardioDays.value.length : days.value.length));
+
 function round(value: number) {
   return Math.round(value * 10) / 10;
 }
@@ -101,7 +125,9 @@ function fullDate(value: string) {
 }
 
 const chart = computed(() => {
-  const points = days.value.map((day) => ({ date: day.date, value: day.topWeight }));
+  const points = cardio.value
+    ? cardioDays.value.map((day) => ({ date: day.date, value: day.seconds / 60 }))
+    : days.value.map((day) => ({ date: day.date, value: day.topWeight }));
   if (!points.length) return null;
 
   const width = 600;
@@ -142,7 +168,30 @@ const chart = computed(() => {
         <p class="micro">{{ data.exercise.type }}</p>
       </header>
 
-      <div class="stat-grid">
+      <div v-if="cardio" class="stat-grid">
+        <div class="stat">
+          <div class="label">Total time</div>
+          <div class="value">{{ totalSeconds ? formatDuration(totalSeconds) : "—" }}</div>
+        </div>
+        <div class="stat">
+          <div class="label">Longest</div>
+          <div class="value">{{ longestSeconds ? formatDuration(longestSeconds) : "—" }}</div>
+        </div>
+        <div v-if="totalDistance" class="stat">
+          <div class="label">Distance</div>
+          <div class="value">{{ round(totalDistance) }} km</div>
+        </div>
+        <div class="stat">
+          <div class="label">Sessions</div>
+          <div class="value">{{ sessionCount }}</div>
+        </div>
+        <div class="stat">
+          <div class="label">Last performed</div>
+          <div class="value">{{ lastSet ? shortDate(lastSet.performedAt) : "—" }}</div>
+        </div>
+      </div>
+
+      <div v-else class="stat-grid">
         <div class="stat">
           <div class="label">Best set</div>
           <div class="value">{{ bestSet ? `${kg(bestSet.weightKg)} × ${bestSet.reps}` : "—" }}</div>
@@ -187,8 +236,14 @@ const chart = computed(() => {
         </p>
       </section>
 
-      <h2>Top set over time</h2>
-      <svg v-if="chart" class="chart" viewBox="0 0 600 180" role="img" aria-label="Top set weight over time">
+      <h2>{{ cardio ? "Minutes per session" : "Top set over time" }}</h2>
+      <svg
+        v-if="chart"
+        class="chart"
+        viewBox="0 0 600 180"
+        role="img"
+        :aria-label="cardio ? 'Minutes per session over time' : 'Top set weight over time'"
+      >
         <text x="0" :y="chart.zeroY + 4">0</text>
         <text v-if="chart.max > 0" x="0" :y="chart.maxY + 4">{{ Math.round(chart.max) }}</text>
         <polyline :points="chart.line" fill="none" stroke="var(--accent)" stroke-width="2" />
@@ -200,7 +255,10 @@ const chart = computed(() => {
           r="3"
           fill="var(--accent)"
         >
-          <title>{{ shortDate(point.date) }}: {{ round(point.value) }} kg</title>
+          <title>
+            {{ shortDate(point.date) }}:
+            {{ cardio ? formatDuration(Math.round(point.value * 60)) : `${round(point.value)} kg` }}
+          </title>
         </circle>
         <text :x="chart.firstX" y="174" text-anchor="start">{{ shortDate(chart.firstDate) }}</text>
         <text v-if="chart.points.length > 1" :x="chart.lastX" y="174" text-anchor="end">
@@ -210,18 +268,20 @@ const chart = computed(() => {
       <p v-else class="muted">No sets yet.</p>
 
       <section class="card">
-        <h2>All sets</h2>
+        <h2>{{ cardio ? "All entries" : "All sets" }}</h2>
         <p v-if="!recent.length" class="muted">No sets yet.</p>
         <div v-else class="set-list">
           <div v-for="row in recent" :key="row.id" class="set-row">
             <div class="set-line">
-              <span class="set-name">{{ kg(row.weightKg) }} × {{ row.reps }}</span>
+              <span class="set-name">{{ formatSetLoad(row) }}</span>
               <span v-if="row.rpe" class="tag">RPE {{ Number(row.rpe) }}</span>
               <span v-if="row.isWarmup" class="tag">warmup</span>
               <span v-for="pr in recordsBySet.get(row.id) ?? []" :key="pr.kind" class="tag pr">
                 {{ recordLabel(pr.kind, pr.reps) }}
               </span>
-              <span class="set-load">e1RM {{ round(e1rm(Number(row.weightKg), row.reps)) }} kg</span>
+              <span v-if="!cardio" class="set-load">
+                e1RM {{ round(e1rm(Number(row.weightKg), row.reps)) }} kg
+              </span>
             </div>
             <div class="set-sub">
               <span>{{ fullDate(row.performedAt) }}</span>

@@ -8,6 +8,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const input = parseSetInput(await readBody(event));
+  await assertSetMatchesExercise(input);
   if (input.workoutId) await assertWorkoutOpen(input.workoutId);
 
   try {

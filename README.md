@@ -15,6 +15,7 @@ plus a small analysis worker, sharing one database.
 - **Routines.** Saved exercise lists, with "copy from last session" to repeat the previous
   weights and reps.
 - **Set details.** Notes, RPE and a warm-up flag on any set.
+- **Cardio.** Cardio machines log a duration and optional distance instead of weight × reps.
 - **Stats.** Weekly volume, training streak and per-exercise top-set history.
 - **Analysis.** Personal-record badges on sets, a plateau hint, and a next-session target per
   exercise (double progression), computed by a background worker.
@@ -72,6 +73,12 @@ worker's heartbeat. No Kafka or RabbitMQ; `LISTEN/NOTIFY` would wake it sooner b
   5 kg) and drop to the bottom of the range; otherwise keep the weight and aim for one more rep.
   The range is the routine's target reps and three below, or 8–12 outside a routine. Suggestions are
   only shown, never written back into routines.
+
+**Cardio is a set with a duration.** A cardio exercise (type `cardio`) logs `duration_seconds` and
+an optional `distance_km` on an ordinary `sets` row, with reps and weight stored as 0, so it sits in
+workouts, history and export with no new tables or routes. The set routes check the entry's shape
+against the exercise type. Cardio counts as a training day but not towards sets or volume, and the
+worker gives it no PRs or targets.
 
 **Every data route starts with `requireSession`.** One guard, applied first, so an endpoint can't
 be added without auth by accident. Malformed input is a 400, never a 500. List endpoints clamp

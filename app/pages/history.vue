@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { recordLabel } from "~~/shared/analysis";
+import { formatSetLoad } from "~~/shared/cardio";
 
 interface SetRow {
   id: string;
@@ -11,6 +12,8 @@ interface SetRow {
   notes: string | null;
   rpe: string | null;
   isWarmup: boolean;
+  durationSeconds: number | null;
+  distanceKm: string | null;
   exerciseName: string;
   workoutStartedAt: string | null;
   workoutEndedAt: string | null;
@@ -250,9 +253,7 @@ function timeOf(value: string) {
             <NuxtLink class="set-name" :to="`/exercises/${row.exerciseId}`">
               {{ row.exerciseName }}
             </NuxtLink>
-            <span class="set-load">
-              {{ Number(row.weightKg) }} kg × {{ row.reps }}
-            </span>
+            <span class="set-load">{{ formatSetLoad(row) }}</span>
           </div>
           <div class="set-sub">
             <span>{{ timeOf(row.performedAt) }}</span>
