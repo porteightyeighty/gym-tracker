@@ -1,61 +1,164 @@
 # Gym tracker
 
-Nuxt + Postgres on Railway. Logs sets, workout sessions, routines, stats and body weight.
+A workout log I use myself, live at [gym.mattport.com](https://gym.mattport.com). It records sets,
+sessions, routines and body weight, and shows progress per exercise and week by week.
 
-## Local
+<!-- TODO(Matt): one or two sentences on why you built it rather than using an existing app. -->
+
+Nuxt 4 (Vue 3) and Nitro, Postgres with Drizzle, Better Auth. Deployed on Railway as the web app
+plus a small analysis worker, sharing one database.
+
+## What it does
+
+- **Sessions.** Start a workout, log sets in a full-screen view built for a phone between sets,
+  with a rest timer. Empty workouts are discarded when you finish.
+- **Routines.** Saved exercise lists, with "copy from last session" to repeat the previous
+  weights and reps.
+- **Set details.** Notes, RPE and a warm-up flag on any set.
+- **Stats.** Weekly volume, training streak and per-exercise top-set history.
+- **Analysis.** Personal-record badges on sets, a plateau hint, and a next-session target per
+  exercise (double progression), computed by a background worker.
+- **History.** Edit or delete past sessions.
+- **Body weight log and CSV export** of everything.
+
+<!-- TODO(3.2): screenshots or a short clip here. -->
+
+## Decisions
+
+**Single-user, on purpose.** There is no `user_id` on any data table and signup is disabled; the
+seed script is the only way to create an account. That keeps every query free of a tenant filter.
+The cost is known: going multi-user means a migration, a backfill on `exercises`, `sets` and
+`body_weights`, and a filter added to every query.
+
+**Store UTC, group in the user's timezone.** Timestamps are `timestamptz` in UTC. Grouping by UTC
+date put late-evening sets on the wrong day, so the client sends its timezone and `/api/stats`
+groups with `AT TIME ZONE` in SQL. Day keys on the client use the same rule.
+
+**Thin routes, tested helpers.** Validation lives in `server/utils/*Input.ts` and aggregation
+(streaks, weekly volume, CSV escaping, progress, analysis rules) in `shared/`. `npm run check`
+runs assertions over those pure functions under plain Node, with no test runner. Integration tests
+(`npm run test:integration`) run the built server and the worker against a real Postgres.
+
+**Analyses are computed asynchronously, from an outbox.** Analyses depend on the whole history of
+an exercise, not just the workout being saved, and editing or deleting a past session changes
+them. Computing them in the request would make every write slower and couple it to rules that
+will change. Instead, any route that changes finished history writes an event row to `outbox` in
+the same transaction as the change, so the event exists if and only if the change committed. The
+worker (`worker/`) picks events up within a couple of seconds and recomputes.
+
+**The consumer is a function of current data, not of the event.** An event only names the
+exercises to look at (`workout_finished { workoutId }`, `history_changed { exerciseIds }`). The
+worker never applies a delta: it recomputes each exercise's records, plateau and target from all
+its finished sets and replaces the stored rows in one transaction. A duplicate, late or
+out-of-order event is therefore harmless, which is what makes at-least-once delivery safe. It also
+means `exercise_analyses` and `personal_records` are disposable: `npm run analyses:replay`
+truncates and rebuilds them, which is how a rule change is rolled out. The integration tests check
+both properties (re-delivering every event changes nothing; replay equals incremental).
+
+**Postgres is the queue.** One user and a database that's already there: the worker claims up to
+10 events with `FOR UPDATE SKIP LOCKED` and handles each in its own savepoint inside the claiming
+transaction. A crash before commit rolls the batch back and releases the locks, so the events are
+claimed again (tested by killing a worker mid-batch). A failing event is retried with backoff
+(2, 4, 8, … s) and after 5 attempts stays unprocessed as a dead letter, logged and counted in the
+worker's heartbeat. No Kafka or RabbitMQ; `LISTEN/NOTIFY` would wake it sooner but polling is enough.
+
+**Analysis rules** (`shared/analysis.ts`). Warm-ups are ignored, and only finished sessions count.
+- *Personal record:* a session's best set that strictly beats every earlier session, for estimated
+  1RM (Epley) and for weight at an exact rep count. The first session is the baseline; ties and
+  first-ever rep counts aren't records. At 0 kg (bodyweight) the record is most reps.
+- *Plateau:* four sessions in a row without a new best e1RM (or rep count at 0 kg).
+- *Next-session target:* double progression from the last session. If every set at its top weight
+  reached the top of the rep range, add one increment (barbell/cable 2.5 kg, dumbbell 2 kg, machine
+  5 kg) and drop to the bottom of the range; otherwise keep the weight and aim for one more rep.
+  The range is the routine's target reps and three below, or 5–8 outside a routine. Suggestions are
+  only shown, never written back into routines.
+
+**Every data route starts with `requireSession`.** One guard, applied first, so an endpoint can't
+be added without auth by accident. Malformed input is a 400, never a 500. List endpoints clamp
+`limit`/`offset` on the server and return `{ items, hasMore }`.
+
+**Session check once per load, not per request.** Better Auth's signed cookie cache (5 minutes)
+skips the session lookup on most API calls, and the client checks the session once per app load
+rather than on every navigation. Page fetches and the stats queries run in parallel.
+
+**Migrations that fail loudly.** Migrations are generated by drizzle-kit and committed, but run
+through drizzle-orm's migrator in Railway's pre-deploy step, so a failed migration stops the
+deploy with a visible error.
+
+<!-- TODO(Matt): why Nuxt, Drizzle and Better Auth over the alternatives you considered, if
+     there's a real reason. Skip it if there isn't. -->
+
+### Left out deliberately
+
+| Idea | Why not |
+|------|---------|
+| Multi-user | See above; not needed for a personal log. |
+| kg/lb toggle | Needs a display layer everywhere and a stored unit per user. |
+| Offline / PWA | The app is used online; no requirement yet. |
+| Wearable import | External API work. CSV export covers the manual case. |
+| Periodisation / RPE autoregulation | Real feature, but a much larger UX job than the RPE field. |
+
+### Known gaps
+
+- No password reset. Re-running the seed with a new password is the recovery path.
+- Bodyweight exercises count as zero volume. Weigh-ins are logged but not applied per set.
+- Per-exercise history is capped at 1,000 sets and the streak at 366 training days, each to keep
+  the query to one round trip.
+- PR badges and targets appear once the worker has run (seconds), not the moment a set is logged.
+  If the worker is down, logging still works and analyses catch up when it restarts.
+- The default 5–8 rep range suits compound lifts; outside a routine it gives low-rep targets for
+  high-rep accessories.
+
+## Running it
+
+Needs Node 24+ and a Postgres database.
 
 ```sh
 npm install
-cp .env.example .env          
+cp .env.example .env    # DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL
 npm run db:migrate
-SEED_EMAIL=you@example.com SEED_PASSWORD=yourpassword npm run seed
+SEED_EMAIL=you@example.com SEED_PASSWORD=at-least-8-chars npm run seed
 npm run dev
 ```
 
-`npm run seed` is idempotent. Re-run it with a different password to reset your login.
+The seed is idempotent; re-run it with a different password to reset the login.
 
-## Deploy to Railway
+| Command | |
+|---------|---|
+| `npm run check` | assertions over the pure helpers |
+| `npm run typecheck` | `nuxt typecheck` (an upstream `vue-router/volar` plugin warning is expected) |
+| `npm run build && npm start` | the production server Railway runs |
+| `npm run db:generate` | generate a migration after editing `server/utils/schema.ts` |
+| `npm run worker` | the analysis worker (run it alongside `npm run dev` to see PRs and targets) |
+| `npm run analyses:replay` | rebuild all analyses from history, e.g. after changing a rule |
+| `TEST_DATABASE_URL=… npm run test:integration` | build, then integration tests against a database whose name contains `test` (it is wiped) |
 
-1. New project → **Deploy from repo**.
-2. Add the **Postgres** plugin. It injects `DATABASE_URL`.
-3. Set service variables:
-   - `BETTER_AUTH_SECRET` — `openssl rand -base64 32`
-   - `BETTER_AUTH_URL` — the public domain Railway gives you, e.g. `https://gym-tracker.up.railway.app`
-4. Deploy. Railway autodetects `npm run build` / `npm start`. In the service's **Settings → Deploy**, set the pre-deploy command to `npx drizzle-kit migrate` and the healthcheck path to `/login`.
-5. Seed your account once:
+## Deploying (Railway)
 
-   ```sh
-   railway run npm run seed
-   ```
+Two services from this repo plus the Postgres plugin, which provides `DATABASE_URL`. Keep all three
+in the same region.
 
-   (with `SEED_EMAIL` / `SEED_PASSWORD` exported, or `SEED_EMAIL=... SEED_PASSWORD=... railway run npm run seed`)
+- Variables: `BETTER_AUTH_SECRET` (`openssl rand -base64 32`), `BETTER_AUTH_URL` (the public
+  https URL, no trailing slash; a mismatch shows up as a login that bounces straight back), and
+  `SEED_EMAIL` / `SEED_PASSWORD`.
+- Pre-deploy command: `npm run db:migrate && npm run seed`.
+- Healthcheck path: `/login`.
 
-Signup is disabled in the app, so the seed script is the only way to create a user.
+The worker is a second service from the same repo: start command `node worker/index.ts`, the same
+`DATABASE_URL`, no public domain and no healthcheck path. It logs a JSON heartbeat every minute
+(pending and dead-letter counts); Railway restarts it on a crash, and SIGTERM on redeploy lets it
+finish its current batch. After the first deploy, or after changing a rule, run
+`npm run analyses:replay` once against the production database.
 
 ## Layout
 
 ```
-shared/                      isomorphic helpers: equipment, progress, routines, stats, csv
-server/utils/schema.ts       drizzle schema (app tables + Better Auth's tables)
-server/utils/db.ts           drizzle client
-server/utils/auth.ts         Better Auth config
-server/utils/requireSession.ts  401 guard used by every data route
-server/utils/*Input.ts       request validation shared with scripts/check.ts
-server/api/                  sets, workouts, routines, stats, body-weights, export.csv
-app/pages/                   index (log + recent sets), login, exercises/:id, routines, stats
-app/middleware/auth.global.ts  redirects to /login when signed out
-scripts/seed.ts              one user + 26 common lifts
-scripts/check.ts             assert-based checks for pure helpers
-drizzle/                     generated SQL migrations, committed
+app/pages/          index (log), history, routines, stats, exercises/:id, login
+server/api/         sets, workouts, routines, exercises, stats, body-weights, export.csv
+server/utils/       schema, db client, auth, requireSession, *Input.ts validation, outbox
+shared/             pure helpers shared by app, server and scripts, incl. analysis rules
+worker/             outbox consumer (process.ts) and its poll loop (index.ts)
+scripts/            migrate, seed, check, replay
+tests/              integration tests against real Postgres
+drizzle/            generated SQL migrations
 ```
-
-## Adding async analysis later
-
-The app is a single service today. To add a consumer:
-
-1. `npm i pg-boss`
-2. Add `worker/index.ts` that creates the boss, `boss.work("analyse-set", ...)`, and writes results to a new `analyses` table (new drizzle schema + migration).
-3. Add a second Railway service from the same repo with start command `node worker/index.ts` (or a compiled entry). It shares `DATABASE_URL`.
-4. In `server/api/sets.post.ts`, after the insert: `await boss.send("analyse-set", { setId: row.id })`.
-
-If losing a job on a failed enqueue ever matters, add an outbox table instead of calling `boss.send` inline.
