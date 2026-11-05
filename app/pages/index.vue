@@ -11,6 +11,7 @@ import {
 } from "reka-ui";
 import { EQUIPMENT } from "~~/shared/equipment";
 import { formatTarget } from "~~/shared/routines";
+import { formatSuggestion, recordLabel } from "~~/shared/analysis";
 import { authClient } from "~~/lib/auth-client";
 
 interface SetRow {
@@ -28,6 +29,7 @@ interface SetRow {
   workoutStartedAt: string | null;
   workoutEndedAt: string | null;
   workoutNotes: string | null;
+  records: { kind: string; reps: number }[];
 }
 
 interface Workout {
@@ -72,6 +74,16 @@ interface LastSet {
   reps: number;
   weightKg: string;
   performedAt: string;
+}
+
+interface Analysis {
+  mode: string;
+  sessions: number;
+  sessionsSinceBest: number;
+  plateau: boolean;
+  targetWeightKg: string | null;
+  targetReps: number | null;
+  targetReason: string | null;
 }
 
 function localInput(date: Date) {
@@ -121,6 +133,7 @@ const form = reactive({
 const selectedExercise = ref<Exercise | null>(null);
 const editingId = ref<string | null>(null);
 const lastSet = ref<LastSet | null>(null);
+const analysis = ref<Analysis | null>(null);
 const error = ref("");
 const busy = ref(false);
 const detailsOpen = ref(false);
@@ -286,10 +299,16 @@ const exerciseGroups = computed(() => {
 async function prefillLast() {
   const id = selectedExercise.value?.id;
   lastSet.value = null;
+  analysis.value = null;
   if (!id || editingId.value) return;
-  const last = await requestFetch<LastSet | null>(`/api/exercises/${id}/last-set`);
+  const [last, derived] = await Promise.all([
+    requestFetch<LastSet | null>(`/api/exercises/${id}/last-set`),
+    // Worker-derived and optional: logging must not fail because the analysis is missing.
+    requestFetch<{ analysis: Analysis | null }>(`/api/exercises/${id}/analysis`).catch(() => null),
+  ]);
   if (selectedExercise.value?.id !== id || editingId.value) return;
   lastSet.value = last;
+  analysis.value = derived?.analysis ?? null;
   if (last) {
     form.weightKg = String(Number(last.weightKg));
     form.reps = String(last.reps);
@@ -611,6 +630,17 @@ function timeOf(value: string) {
         <p v-if="lastSet && !editingId" class="muted">
           Last: {{ Number(lastSet.weightKg) }} kg × {{ lastSet.reps }}
         </p>
+        <p
+          v-if="analysis?.targetReps && !editingId"
+          class="muted suggestion"
+          :title="analysis.targetReason ?? undefined"
+        >
+          Next: <strong>{{ formatSuggestion(analysis.targetWeightKg, analysis.targetReps) }}</strong>
+          · {{ analysis.targetReason }}
+        </p>
+        <p v-if="analysis?.plateau && !editingId" class="muted suggestion">
+          Plateau: no new best in {{ analysis.sessionsSinceBest }} sessions.
+        </p>
 
         <div class="big-inputs">
           <div class="big-field">
@@ -711,6 +741,9 @@ function timeOf(value: string) {
               <span>{{ timeOf(row.performedAt) }}</span>
               <span v-if="row.rpe" class="tag">RPE {{ Number(row.rpe) }}</span>
               <span v-if="row.isWarmup" class="tag">warmup</span>
+              <span v-for="pr in row.records" :key="pr.kind" class="tag pr">
+                {{ recordLabel(pr.kind, pr.reps) }}
+              </span>
               <span v-if="row.notes" class="set-note" :title="row.notes">{{ row.notes }}</span>
             </div>
             <div class="set-actions">

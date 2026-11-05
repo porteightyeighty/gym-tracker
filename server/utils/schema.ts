@@ -2,10 +2,12 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -132,4 +134,68 @@ export const bodyWeights = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("body_weights_measured_at_idx").on(t.measuredAt)],
+);
+
+/**
+ * Transactional outbox: routes write an event in the same transaction as the change, and the
+ * worker (`worker/`) claims rows with FOR UPDATE SKIP LOCKED. Rows with attempts >= the worker's
+ * limit and no processed_at are dead letters.
+ */
+export const outbox = pgTable(
+  "outbox",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: text("kind").notNull(),
+    payload: jsonb("payload").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+  },
+  (t) => [index("outbox_pending_idx").on(t.processedAt, t.availableAt)],
+);
+
+/** Derived from sets by the worker; safe to truncate and rebuild with `npm run analyses:replay`. */
+export const exerciseAnalyses = pgTable("exercise_analyses", {
+  exerciseId: uuid("exercise_id")
+    .primaryKey()
+    .references(() => exercises.id, { onDelete: "cascade" }),
+  /** "load" scores sessions by best e1RM in kg; "reps" (every working set at 0 kg) by most reps. */
+  mode: text("mode").notNull(),
+  sessions: integer("sessions").notNull(),
+  bestValue: numeric("best_value", { precision: 8, scale: 2 }),
+  sessionsSinceBest: integer("sessions_since_best").notNull(),
+  plateau: boolean("plateau").notNull(),
+  targetWeightKg: numeric("target_weight_kg", { precision: 6, scale: 2 }),
+  targetReps: integer("target_reps"),
+  repRangeLow: integer("rep_range_low"),
+  repRangeHigh: integer("rep_range_high"),
+  targetReason: text("target_reason"),
+  lastSessionAt: timestamp("last_session_at", { withTimezone: true }),
+  computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One row per set that beat every earlier session at the time it was performed. */
+export const personalRecords = pgTable(
+  "personal_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    exerciseId: uuid("exercise_id")
+      .notNull()
+      .references(() => exercises.id, { onDelete: "cascade" }),
+    setId: uuid("set_id")
+      .notNull()
+      .references(() => sets.id, { onDelete: "cascade" }),
+    /** "e1rm", "weight" (heaviest at this rep count) or "reps" (most reps at 0 kg). */
+    kind: text("kind").notNull(),
+    reps: integer("reps").notNull(),
+    weightKg: numeric("weight_kg", { precision: 6, scale: 2 }).notNull(),
+    value: numeric("value", { precision: 8, scale: 2 }).notNull(),
+    performedAt: timestamp("performed_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("personal_records_set_kind_idx").on(t.setId, t.kind),
+    index("personal_records_exercise_idx").on(t.exerciseId),
+  ],
 );

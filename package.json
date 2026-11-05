@@ -11,8 +11,11 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.ts",
     "seed": "node --env-file-if-exists=.env scripts/seed.ts",
+    "worker": "node --env-file-if-exists=.env worker/index.ts",
+    "analyses:replay": "node --env-file-if-exists=.env scripts/replay.ts",
     "check": "node scripts/check.ts",
-    "typecheck": "nuxt typecheck"
+    "test:integration": "nuxt build && node --env-file-if-exists=.env tests/integration.ts",
+    "typecheck": "nuxt typecheck && tsc -p tsconfig.scripts.json"
   },
   "dependencies": {
     "better-auth": "^1.7.15",
@@ -27,6 +30,7 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@types/pg": "^8.15.0",
+    "railway": "^3.16.0",
     "typescript": "^5.9.0",
     "vue-tsc": "^3.1.8"
   }

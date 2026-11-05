@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { dayStats, e1rm } from "~~/shared/progress";
+import { formatSuggestion, recordLabel } from "~~/shared/analysis";
 
 interface Exercise {
   id: string;
@@ -17,10 +18,44 @@ interface SetRow {
   isWarmup: boolean;
 }
 
+interface Analysis {
+  mode: string;
+  sessions: number;
+  bestValue: string | null;
+  sessionsSinceBest: number;
+  plateau: boolean;
+  targetWeightKg: string | null;
+  targetReps: number | null;
+  repRangeLow: number | null;
+  repRangeHigh: number | null;
+  targetReason: string | null;
+  computedAt: string;
+}
+
+interface RecordRow {
+  setId: string;
+  kind: string;
+  reps: number;
+}
+
 const route = useRoute();
-const { data, error } = await useFetch<{ exercise: Exercise; sets: SetRow[] }>(
-  () => `/api/exercises/${route.params.id}`,
-);
+const [{ data, error }, { data: derived }] = await Promise.all([
+  useFetch<{ exercise: Exercise; sets: SetRow[] }>(() => `/api/exercises/${route.params.id}`),
+  useFetch<{ analysis: Analysis | null; records: RecordRow[] }>(
+    () => `/api/exercises/${route.params.id}/analysis`,
+  ),
+]);
+
+const analysis = computed(() => derived.value?.analysis ?? null);
+const recordsBySet = computed(() => {
+  const map = new Map<string, RecordRow[]>();
+  for (const record of derived.value?.records ?? []) {
+    const list = map.get(record.setId);
+    if (list) list.push(record);
+    else map.set(record.setId, [record]);
+  }
+  return map;
+});
 
 const rows = computed(() => data.value?.sets ?? []);
 const recent = computed(() => [...rows.value].reverse());
@@ -130,6 +165,28 @@ const chart = computed(() => {
         </div>
       </div>
 
+      <section v-if="analysis" class="card">
+        <h2>Next session</h2>
+        <p v-if="analysis.targetReps" class="suggestion">
+          <strong>{{ formatSuggestion(analysis.targetWeightKg, analysis.targetReps) }}</strong>
+          <span v-if="analysis.repRangeLow" class="muted">
+            · range {{ analysis.repRangeLow }}–{{ analysis.repRangeHigh }}
+          </span>
+        </p>
+        <p v-if="analysis.targetReason" class="muted">{{ analysis.targetReason }}</p>
+        <p v-if="analysis.plateau" class="muted">
+          Plateau: no new best {{ analysis.mode === "reps" ? "rep count" : "e1RM" }} in
+          {{ analysis.sessionsSinceBest }} sessions.
+        </p>
+        <p v-else-if="analysis.sessions > 1" class="micro">
+          {{
+            analysis.sessionsSinceBest
+              ? `${analysis.sessionsSinceBest} sessions since your best`
+              : "Your last session was your best"
+          }}
+        </p>
+      </section>
+
       <h2>Top set over time</h2>
       <svg v-if="chart" class="chart" viewBox="0 0 600 180" role="img" aria-label="Top set weight over time">
         <text x="0" :y="chart.zeroY + 4">0</text>
@@ -161,6 +218,9 @@ const chart = computed(() => {
               <span class="set-name">{{ kg(row.weightKg) }} × {{ row.reps }}</span>
               <span v-if="row.rpe" class="tag">RPE {{ Number(row.rpe) }}</span>
               <span v-if="row.isWarmup" class="tag">warmup</span>
+              <span v-for="pr in recordsBySet.get(row.id) ?? []" :key="pr.kind" class="tag pr">
+                {{ recordLabel(pr.kind, pr.reps) }}
+              </span>
               <span class="set-load">e1RM {{ round(e1rm(Number(row.weightKg), row.reps)) }} kg</span>
             </div>
             <div class="set-sub">

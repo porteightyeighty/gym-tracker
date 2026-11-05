@@ -1,0 +1,16 @@
+{
+  "//": "Plain-Node code (worker, scripts) run via type stripping; nuxt typecheck does not cover it.",
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["worker/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
+}

@@ -11,6 +11,16 @@ import { dayStats, e1rm } from "../shared/progress.ts";
 import { formatTarget, summariseSession } from "../shared/routines.ts";
 import { dayKeyInZone, streak } from "../shared/stats.ts";
 import { toCsv } from "../shared/csv.ts";
+import {
+  analyseExercise,
+  groupSessions,
+  nextTarget,
+  personalRecords,
+  plateauStatus,
+  repRangeFor,
+  type AnalysisSet,
+} from "../shared/analysis.ts";
+import { weightIncrement } from "../shared/equipment.ts";
 
 const valid = {
   exerciseId: "123e4567-e89b-12d3-a456-426614174000",
@@ -214,5 +224,147 @@ assert.throws(
   () => parseUpdateWorkoutInput({ startedAt: "nope" }),
   (err: any) => err.statusCode === 400,
 );
+
+// ---------- analysis ----------
+
+let setSeq = 0;
+function aset(workout: string | null, day: number, weightKg: number, reps: number, extra: Partial<AnalysisSet> = {}): AnalysisSet {
+  setSeq += 1;
+  return {
+    id: `s${String(setSeq).padStart(3, "0")}`,
+    workoutId: workout,
+    routineId: null,
+    weightKg: weightKg.toFixed(2),
+    reps,
+    performedAt: new Date(Date.UTC(2026, 0, day, 10, 0, setSeq)),
+    isWarmup: false,
+    ...extra,
+  };
+}
+
+// A single session: a baseline with no records, no plateau, and a target.
+{
+  const single = analyseExercise({ equipment: "barbell", sets: [aset("w1", 1, 100, 8), aset("w1", 1, 100, 8)] });
+  assert.equal(single.records.length, 0);
+  assert.equal(single.analysis.sessions, 1);
+  assert.equal(single.analysis.plateau, false);
+  assert.equal(single.analysis.sessionsSinceBest, 0);
+  assert.equal(single.analysis.target?.weightKg, 102.5);
+  assert.equal(single.analysis.target?.reps, 5);
+  assert.equal(analyseExercise({ equipment: "barbell", sets: [] }).analysis.target, null);
+}
+
+// Warm-ups are excluded: from records, from sessions and from the target.
+{
+  const sets = [
+    aset("w1", 1, 100, 5),
+    aset("w2", 2, 200, 5, { isWarmup: true }),
+    aset("w2", 2, 100, 5),
+    aset("w3", 3, 60, 10, { isWarmup: true }),
+  ];
+  const result = analyseExercise({ equipment: "barbell", sets });
+  assert.equal(result.records.length, 0);
+  assert.equal(result.analysis.sessions, 2);
+  assert.equal(result.analysis.bestValue, Math.round(e1rm(100, 5) * 100) / 100);
+}
+
+// Records: strictly better than every earlier session; ties are not records; one per session.
+{
+  const sets = [
+    aset("w1", 1, 100, 5),
+    aset("w2", 2, 100, 5), // tie: nothing
+    aset("w3", 3, 102.5, 5),
+    aset("w3", 3, 105, 5), // the session's best wins both kinds
+    aset("w3", 3, 90, 3), // first time at 3 reps: no baseline, no record
+    aset("w4", 4, 92.5, 3), // beats the 3-rep best, but not the e1RM
+  ];
+  const records = personalRecords(groupSessions(sets), "load");
+  assert.deepEqual(
+    records.map((r) => [r.setId, r.kind, r.reps]),
+    [
+      [sets[3]!.id, "e1rm", 5],
+      [sets[3]!.id, "weight", 5],
+      [sets[5]!.id, "weight", 3],
+    ],
+  );
+  // Two identical best sets in a session: the earlier one holds the record.
+  const tied = personalRecords(groupSessions([aset("a", 1, 100, 5), aset("b", 2, 110, 5), aset("b", 2, 110, 5)]), "load");
+  assert.equal(tied.filter((r) => r.kind === "e1rm").length, 1);
+}
+
+// Bodyweight at 0 kg: scored by reps, records are rep records, target is one more rep.
+{
+  const sets = [aset("w1", 1, 0, 10), aset("w2", 2, 0, 12), aset("w3", 3, 0, 12)];
+  const result = analyseExercise({ equipment: "bodyweight", sets });
+  assert.equal(result.analysis.mode, "reps");
+  assert.equal(result.analysis.bestValue, 12);
+  assert.deepEqual(result.records.map((r) => [r.kind, r.value]), [["reps", 12]]);
+  assert.equal(result.analysis.target?.weightKg, 0);
+  assert.equal(result.analysis.target?.reps, 13);
+  // Added weight on a bodyweight exercise switches it to load mode.
+  const weighted = analyseExercise({ equipment: "bodyweight", sets: [...sets, aset("w4", 4, 10, 5)] });
+  assert.equal(weighted.analysis.mode, "load");
+}
+
+// Plateau: PLATEAU_SESSIONS sessions in a row without a new best e1RM.
+{
+  const flat = [aset("a", 1, 100, 5), aset("b", 2, 100, 5), aset("c", 3, 100, 5), aset("d", 4, 100, 5)];
+  assert.equal(plateauStatus(groupSessions(flat), "load").plateau, false);
+  assert.equal(plateauStatus(groupSessions(flat), "load").sessionsSinceBest, 3);
+  const five = [...flat, aset("e", 5, 97.5, 5)];
+  assert.equal(plateauStatus(groupSessions(five), "load").plateau, true);
+  const broken = [...five, aset("f", 6, 100, 6)];
+  assert.equal(plateauStatus(groupSessions(broken), "load").plateau, false);
+  assert.equal(plateauStatus(groupSessions(broken), "load").sessionsSinceBest, 0);
+}
+
+// Double progression and rep-range edges.
+{
+  assert.deepEqual(repRangeFor(null), [5, 8]);
+  assert.deepEqual(repRangeFor(10), [7, 10]);
+  assert.deepEqual(repRangeFor(2), [1, 2]);
+  const at = (...reps: number[]) => groupSessions(reps.map((r) => aset("x", 1, 60, r)))[0]!;
+  // Exactly at the top on every set: add weight, back to the bottom.
+  assert.deepEqual(
+    [nextTarget(at(8, 8, 8), "load", "barbell", [5, 8]).weightKg, nextTarget(at(8, 8, 8), "load", "barbell", [5, 8]).reps],
+    [62.5, 5],
+  );
+  // One set short: same weight, one more rep than the weakest set.
+  const short = nextTarget(at(8, 8, 6), "load", "barbell", [5, 8]);
+  assert.deepEqual([short.weightKg, short.reps], [60, 7]);
+  // Below the bottom of the range still aims for +1; never above the top.
+  assert.equal(nextTarget(at(3), "load", "barbell", [5, 8]).reps, 4);
+  assert.equal(nextTarget(at(7), "load", "barbell", [5, 8]).reps, 8);
+  // Increment per equipment type.
+  assert.equal(nextTarget(at(8), "load", "machine", [5, 8]).weightKg, 65);
+  assert.equal(nextTarget(at(8), "load", "dumbbell", [5, 8]).weightKg, 62);
+  assert.equal(weightIncrement("unknown"), 2.5);
+  // Lighter back-off sets don't hold progression back.
+  const backoff = groupSessions([aset("y", 1, 100, 8), aset("y", 1, 100, 8), aset("y", 1, 80, 6)])[0]!;
+  assert.equal(nextTarget(backoff, "load", "barbell", [5, 8]).weightKg, 102.5);
+  // The routine's rep target sets the range when the last session came from a routine.
+  const routineSets = [aset("r1", 1, 50, 10, { routineId: "R" })];
+  const fromRoutine = analyseExercise({ equipment: "cable", sets: routineSets, routineTargetReps: new Map([["R", 10]]) });
+  assert.deepEqual(fromRoutine.analysis.target?.repRange, [7, 10]);
+  assert.equal(fromRoutine.analysis.target?.weightKg, 52.5);
+}
+
+// Sets outside a workout group by time gaps, not by calendar day.
+{
+  const loose = groupSessions([
+    aset(null, 1, 100, 5, { performedAt: new Date("2026-01-01T23:00:00Z") }),
+    aset(null, 1, 100, 5, { performedAt: new Date("2026-01-02T00:30:00Z") }),
+    aset(null, 1, 100, 5, { performedAt: new Date("2026-01-02T09:00:00Z") }),
+  ]);
+  assert.deepEqual(loose.map((s) => s.sets.length), [2, 1]);
+}
+
+// Same input in a different order gives the same result.
+{
+  const sets = [aset("a", 1, 100, 5), aset("b", 2, 105, 5), aset("c", 3, 110, 3), aset(null, 4, 0, 1)];
+  const forward = analyseExercise({ equipment: "barbell", sets });
+  const backward = analyseExercise({ equipment: "barbell", sets: [...sets].reverse() });
+  assert.deepEqual(forward, backward);
+}
 
 console.log("checks passed");

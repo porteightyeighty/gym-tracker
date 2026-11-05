@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 
 export default defineEventHandler(async (event) => {
   await requireSession(event);
@@ -26,6 +26,10 @@ export default defineEventHandler(async (event) => {
       workoutStartedAt: workouts.startedAt,
       workoutEndedAt: workouts.endedAt,
       workoutNotes: workouts.notes,
+      records: sql<{ kind: string; reps: number }[]>`coalesce((
+        select json_agg(json_build_object('kind', ${personalRecords.kind}, 'reps', ${personalRecords.reps}))
+        from ${personalRecords} where ${personalRecords.setId} = ${sets.id}
+      ), '[]'::json)`,
     })
     .from(sets)
     .innerJoin(exercises, eq(sets.exerciseId, exercises.id))

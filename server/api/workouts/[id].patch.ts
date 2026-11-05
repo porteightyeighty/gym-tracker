@@ -39,13 +39,18 @@ export default defineEventHandler(async (event) => {
         .set({ performedAt: sql`${sets.performedAt} + make_interval(secs => ${deltaMs / 1000})` })
         .where(eq(sets.workoutId, id));
     }
-    // Finishing an empty workout is a discard, not a session worth keeping.
     if (update.endedAt && !existing.endedAt) {
+      // Finishing an empty workout is a discard, not a session worth keeping.
       const [set] = await tx.select({ id: sets.id }).from(sets).where(eq(sets.workoutId, id)).limit(1);
       if (!set) {
         await tx.delete(workouts).where(eq(workouts.id, id));
         return { deleted: true };
       }
+      // First finish only: later PATCHes keep the first end time and write no event.
+      await enqueue(tx, "workout_finished", { workoutId: id });
+    } else if (deltaMs && existing.endedAt) {
+      // Moving a finished session reorders history, which can move records and targets.
+      await enqueueHistoryChanged(tx, await workoutExerciseIds(tx, id));
     }
     const [row] = await tx.update(workouts).set(update).where(eq(workouts.id, id)).returning();
     return row;

@@ -14,6 +14,7 @@ export default defineEventHandler(async (event) => {
   }
 
   await db.transaction(async (tx) => {
+    await enqueueHistoryChanged(tx, await workoutExerciseIds(tx, id));
     await tx.delete(sets).where(eq(sets.workoutId, id));
     await tx.delete(workouts).where(eq(workouts.id, id));
   });

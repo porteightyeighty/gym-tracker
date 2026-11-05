@@ -88,6 +88,16 @@ export async function replaceRoutine(id: string, input: RoutineInput) {
       .returning();
     if (!routine) return null;
 
+    // Target reps set the rep range for sessions from this routine, so analyses can change.
+    const previous = await tx
+      .select({ exerciseId: routineExercises.exerciseId })
+      .from(routineExercises)
+      .where(eq(routineExercises.routineId, id));
+    await enqueueHistoryChanged(tx, [
+      ...previous.map((row) => row.exerciseId),
+      ...input.exercises.map((row) => row.exerciseId),
+    ]);
+
     await tx.delete(routineExercises).where(eq(routineExercises.routineId, id));
     if (input.exercises.length) {
       await tx.insert(routineExercises).values(exerciseValues(id, input));

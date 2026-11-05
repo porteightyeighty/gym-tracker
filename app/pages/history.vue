@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { recordLabel } from "~~/shared/analysis";
+
 interface SetRow {
   id: string;
   exerciseId: string;
@@ -13,6 +15,7 @@ interface SetRow {
   workoutStartedAt: string | null;
   workoutEndedAt: string | null;
   workoutNotes: string | null;
+  records: { kind: string; reps: number }[];
 }
 
 const PAGE_SIZE = 20;
@@ -255,6 +258,7 @@ function timeOf(value: string) {
             <span>{{ timeOf(row.performedAt) }}</span>
             <span v-if="row.rpe" class="tag">RPE {{ Number(row.rpe) }}</span>
             <span v-if="row.isWarmup" class="tag">warmup</span>
+            <span v-for="pr in row.records" :key="pr.kind" class="tag pr">{{ recordLabel(pr.kind, pr.reps) }}</span>
             <span v-if="row.notes" class="set-note" :title="row.notes">{{ row.notes }}</span>
           </div>
           <div class="set-actions">
