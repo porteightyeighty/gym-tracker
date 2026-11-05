@@ -11,6 +11,7 @@ Nuxt 4 + Postgres + Drizzle, deliberately single-user. Two Railway services from
 - `npm run build && npm start` — what Railway runs (`node .output/server/index.mjs`). Verify UI changes here, not only in `npm run dev`.
 - `npm run db:generate` after editing `server/utils/schema.ts`, then `npm run db:migrate`. Commit the generated SQL in `drizzle/`; never hand-write migrations.
 - `SEED_EMAIL=... SEED_PASSWORD=... npm run seed` — idempotent; re-run with a new password to reset a login. Signup is disabled, so this is the only way to create a user.
+- `DATABASE_URL=.../gym_demo npm run demo:data` — replaces all training data with ~12 weeks of made-up history (`shared/demo.ts`) and rebuilds analyses. Refuses a database whose name lacks `demo`. Migrate and seed that database first. Use it for screenshots; never screenshot real data.
 - CI (`.github/workflows/ci.yml`) runs check, typecheck and integration tests on push to `main`; run `npm run check` and `npm run typecheck` locally before pushing anyway.
 - Node 24+ required. Scripts run `.ts` files directly via Node type stripping, so relative imports need explicit `.ts` extensions and cannot use Nuxt aliases.
 

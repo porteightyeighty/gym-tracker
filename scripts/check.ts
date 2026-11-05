@@ -22,6 +22,7 @@ import {
   type AnalysisSet,
 } from "../shared/analysis.ts";
 import { weightIncrement } from "../shared/equipment.ts";
+import { buildDemoHistory } from "../shared/demo.ts";
 
 const valid = {
   exerciseId: "123e4567-e89b-12d3-a456-426614174000",
@@ -369,6 +370,47 @@ function aset(workout: string | null, day: number, weightKg: number, reps: numbe
   const forward = analyseExercise({ equipment: "barbell", sets });
   const backward = analyseExercise({ equipment: "barbell", sets: [...sets].reverse() });
   assert.deepEqual(forward, backward);
+}
+
+// Demo history: deterministic, entirely in the past, recent, and showing both progress and a plateau.
+{
+  const now = new Date("2026-11-05T12:00:00.000Z");
+  const demo = buildDemoHistory(now);
+  assert.deepEqual(buildDemoHistory(now), demo);
+  assert.notDeepEqual(buildDemoHistory(now, 2), demo);
+  assert.ok(demo.workouts.length >= 30);
+
+  const last = demo.workouts[demo.workouts.length - 1]!;
+  assert.ok(now.getTime() - last.startedAt.getTime() < 3 * 24 * 60 * 60 * 1000);
+  for (const w of demo.workouts) {
+    assert.ok(w.endedAt < now && w.startedAt < w.endedAt);
+    for (const s of w.sets) {
+      assert.ok(s.performedAt > w.startedAt && s.performedAt < w.endedAt);
+      if (s.durationSeconds !== null) assert.ok(s.reps === 0 && s.weightKg === 0 && s.durationSeconds > 0);
+      else assert.ok(s.reps > 0 && s.weightKg >= 0);
+    }
+  }
+  assert.ok(demo.bodyWeights.every((b) => b.measuredAt < now && b.weightKg > 70 && b.weightKg < 90));
+
+  const plateaus = (history: typeof demo, name: string) => {
+    const rows: AnalysisSet[] = history.workouts.flatMap((w, i) =>
+      w.sets
+        .filter((s) => s.exercise === name)
+        .map((s, j) => ({ id: `${i}-${j}`, workoutId: `w${i}`, routineId: null, weightKg: s.weightKg, reps: s.reps, performedAt: s.performedAt })),
+    );
+    return analyseExercise({ equipment: "barbell", sets: rows }).analysis.plateau;
+  };
+
+  // Training days depend on the weekday, so check a whole week: only the stalled lift plateaus.
+  for (let d = 0; d < 7; d++) {
+    const day = new Date(now.getTime() + d * 24 * 60 * 60 * 1000);
+    const history = buildDemoHistory(day);
+    for (const routine of history.routines) {
+      for (const { name } of routine.exercises) {
+        assert.equal(plateaus(history, name), name === "Overhead press", `${name} on day ${d}`);
+      }
+    }
+  }
 }
 
 console.log("checks passed");
