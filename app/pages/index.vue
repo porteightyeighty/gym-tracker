@@ -512,11 +512,13 @@ function pickRoutineExercise(item: RoutineExercise) {
   selectedExercise.value = { id: item.exerciseId, name: item.name, type: item.type };
 }
 
+// Picks the first unlogged exercise when a routine workout starts (or the page loads), but not
+// after each set: the next set is usually the same exercise. Tap a chip to move on.
 watch(
-  routineItems,
-  (items) => {
-    if (editingId.value) return;
-    const next = items.find((item) => item.next);
+  () => (routine.value ? activeWorkout.value?.id : null),
+  (workoutId) => {
+    if (!workoutId || editingId.value) return;
+    const next = routineItems.value.find((item) => item.next);
     if (next && selectedExercise.value?.id !== next.exerciseId) {
       pickRoutineExercise(next);
     }
