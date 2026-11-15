@@ -10,7 +10,7 @@ import {
   ComboboxViewport,
 } from "reka-ui";
 import { EQUIPMENT, isCardio } from "~~/shared/equipment";
-import { formatDuration, formatSetLoad, parseDuration } from "~~/shared/cardio";
+import { formatDuration, formatSessionSummary, formatSetLoad, parseDuration } from "~~/shared/cardio";
 import { formatTarget } from "~~/shared/routines";
 import { formatSuggestion, recordLabel } from "~~/shared/analysis";
 import { authClient } from "~~/lib/auth-client";
@@ -80,6 +80,11 @@ interface LastSet {
   performedAt: string;
 }
 
+interface LastSession {
+  startedAt: string;
+  sets: Omit<LastSet, "performedAt">[];
+}
+
 interface Analysis {
   mode: string;
   sessions: number;
@@ -139,6 +144,7 @@ const selectedExercise = ref<Exercise | null>(null);
 const cardioSelected = computed(() => isCardio(selectedExercise.value?.type));
 const editingId = ref<string | null>(null);
 const lastSet = ref<LastSet | null>(null);
+const lastSession = ref<LastSession | null>(null);
 const analysis = ref<Analysis | null>(null);
 const error = ref("");
 const busy = ref(false);
@@ -305,10 +311,12 @@ const exerciseGroups = computed(() => {
 async function prefillLast() {
   const id = selectedExercise.value?.id;
   lastSet.value = null;
+  lastSession.value = null;
   analysis.value = null;
   if (!id || editingId.value) return;
-  const [last, derived] = await Promise.all([
+  const [last, previous, derived] = await Promise.all([
     requestFetch<LastSet | null>(`/api/exercises/${id}/last-set`),
+    requestFetch<LastSession | null>(`/api/exercises/${id}/last-session`),
     // Worker-derived and optional: logging must not fail because the analysis is missing.
     // Cardio is never analysed, so don't ask.
     cardioSelected.value
@@ -317,6 +325,7 @@ async function prefillLast() {
   ]);
   if (selectedExercise.value?.id !== id || editingId.value) return;
   lastSet.value = last;
+  lastSession.value = previous;
   analysis.value = derived?.analysis ?? null;
   if (last?.durationSeconds != null) {
     form.duration = formatDuration(last.durationSeconds);
@@ -328,6 +337,18 @@ async function prefillLast() {
 }
 
 watch(selectedExercise, prefillLast);
+
+/** After logging, "Last set" is the one just saved. The form is left alone. */
+async function refreshLastSet() {
+  const id = selectedExercise.value?.id;
+  if (!id || editingId.value) return;
+  const last = await requestFetch<LastSet | null>(`/api/exercises/${id}/last-set`).catch(() => null);
+  if (selectedExercise.value?.id === id && !editingId.value) lastSet.value = last;
+}
+
+function shortDay(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
 
 function resetForm() {
   form.weightKg = "";
@@ -390,6 +411,7 @@ async function saveSet() {
       form.performedAt = nowLocal();
       await refreshSets();
     }
+    await refreshLastSet();
   } catch (err: any) {
     error.value = err?.data?.statusMessage ?? "Could not save set";
   } finally {
@@ -647,7 +669,10 @@ function timeOf(value: string) {
           </template>
         </ComboboxRoot>
 
-        <p v-if="lastSet && !editingId" class="muted">Last: {{ formatSetLoad(lastSet) }}</p>
+        <p v-if="lastSession && !editingId" class="muted">
+          Last session ({{ shortDay(lastSession.startedAt) }}): {{ formatSessionSummary(lastSession.sets) }}
+        </p>
+        <p v-if="lastSet && !editingId" class="muted">Last set: {{ formatSetLoad(lastSet) }}</p>
         <p
           v-if="analysis?.targetReps && !editingId"
           class="muted suggestion"

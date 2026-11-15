@@ -127,6 +127,25 @@ export function groupSessions(rows: AnalysisSet[]): Session[] {
   );
 }
 
+/**
+ * The rows of the most recent session that is over. Rows from an open workout must already be
+ * left out; a loose session whose last set is within LOOSE_SESSION_GAP_MS of `now` is still going,
+ * so the session before it is returned. Empty when there is none.
+ */
+export function lastFinishedSession<T extends AnalysisSet>(rows: T[], now: Date): T[] {
+  const sessions = groupSessions(rows);
+  let last = sessions.at(-1);
+  if (
+    last?.key.startsWith("loose:") &&
+    now.getTime() - last.sets.at(-1)!.performedAt.getTime() <= LOOSE_SESSION_GAP_MS
+  ) {
+    last = sessions.at(-2);
+  }
+  if (!last) return [];
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return last.sets.map((set) => byId.get(set.id)!);
+}
+
 /** "reps" when every working set is at 0 kg (bodyweight); otherwise load, scored by e1RM. */
 export function analysisMode(sessions: Session[]): AnalysisMode {
   return sessions.some((s) => s.sets.some((set) => set.weightKg > 0)) ? "load" : "reps";

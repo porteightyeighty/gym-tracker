@@ -11,10 +11,11 @@ import { dayStats, e1rm } from "../shared/progress.ts";
 import { formatTarget, summariseSession } from "../shared/routines.ts";
 import { dayKeyInZone, streak } from "../shared/stats.ts";
 import { toCsv } from "../shared/csv.ts";
-import { formatDuration, formatSetLoad, parseDuration } from "../shared/cardio.ts";
+import { formatDuration, formatSessionSummary, formatSetLoad, parseDuration } from "../shared/cardio.ts";
 import {
   analyseExercise,
   groupSessions,
+  lastFinishedSession,
   nextTarget,
   personalRecords,
   plateauStatus,
@@ -84,6 +85,22 @@ assert.equal(formatDuration(59), "0:59");
 assert.equal(formatSetLoad({ reps: 0, weightKg: "0.00", durationSeconds: 978, distanceKm: "3.20" }), "16:18 · 3.2 km");
 assert.equal(formatSetLoad({ reps: 0, weightKg: "0.00", durationSeconds: 978, distanceKm: null }), "16:18");
 assert.equal(formatSetLoad({ reps: 10, weightKg: "27.50", durationSeconds: null }), "27.5 kg × 10");
+{
+  const s = (weightKg: string, reps: number) => ({ reps, weightKg, durationSeconds: null });
+  assert.equal(formatSessionSummary([s("15.00", 10), s("15.00", 10), s("15.00", 10)]), "3×10 @ 15 kg");
+  assert.equal(formatSessionSummary([s("15.00", 10), s("15.00", 10), s("15.00", 8)]), "10, 10, 8 @ 15 kg");
+  assert.equal(formatSessionSummary([s("100.00", 5), s("80.00", 8), s("80.00", 8)]), "5 @ 100 kg · 2×8 @ 80 kg");
+  assert.equal(formatSessionSummary([s("0.00", 12), s("0.00", 12)]), "2×12");
+  assert.equal(formatSessionSummary([s("0.00", 12), s("0.00", 9)]), "12, 9");
+  assert.equal(
+    formatSessionSummary([
+      { reps: 0, weightKg: "0.00", durationSeconds: 978, distanceKm: "3.20" },
+      { reps: 0, weightKg: "0.00", durationSeconds: 600, distanceKm: null },
+    ]),
+    "16:18 · 3.2 km, 10:00",
+  );
+  assert.equal(formatSessionSummary([]), "");
+}
 
 const parsedMeta = parseSetInput({ ...valid, notes: "  hard  ", rpe: 7.5 });
 assert.equal(parsedMeta.notes, "hard");
@@ -362,6 +379,17 @@ function aset(workout: string | null, day: number, weightKg: number, reps: numbe
     aset(null, 1, 100, 5, { performedAt: new Date("2026-01-02T09:00:00Z") }),
   ]);
   assert.deepEqual(loose.map((s) => s.sets.length), [2, 1]);
+}
+
+// Last finished session: a loose session still going (last set within the gap) is skipped.
+{
+  const old = aset("w1", 1, 60, 10);
+  const older = aset("w1", 1, 60, 8);
+  const recent = aset(null, 5, 62.5, 10, { performedAt: new Date("2026-01-05T10:00:00Z") });
+  assert.deepEqual(lastFinishedSession([old, older, recent], new Date("2026-01-05T11:00:00Z")).map((r) => r.id), [old.id, older.id]);
+  assert.deepEqual(lastFinishedSession([old, older, recent], new Date("2026-01-05T14:00:01Z")).map((r) => r.id), [recent.id]);
+  assert.deepEqual(lastFinishedSession([recent], new Date("2026-01-05T11:00:00Z")), []);
+  assert.deepEqual(lastFinishedSession([], new Date()), []);
 }
 
 // Same input in a different order gives the same result.

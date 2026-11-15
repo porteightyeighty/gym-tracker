@@ -47,3 +47,26 @@ export function formatSetLoad(row: LoadLike): string {
   }
   return `${Number(row.weightKg)} kg × ${row.reps}`;
 }
+
+/**
+ * A whole session in one line, sets in order, runs at the same weight merged:
+ * "3×10 @ 15 kg", "10, 10, 8 @ 15 kg", "5 @ 100 kg · 2×8 @ 80 kg", "3×12" at 0 kg.
+ * Cardio lists each entry: "27:56 · 3.2 km, 10:00".
+ */
+export function formatSessionSummary(rows: LoadLike[]): string {
+  if (rows.some((row) => row.durationSeconds != null)) return rows.map(formatSetLoad).join(", ");
+  const runs: { weight: number; reps: number[] }[] = [];
+  for (const row of rows) {
+    const weight = Number(row.weightKg);
+    const run = runs.at(-1);
+    if (run && run.weight === weight) run.reps.push(row.reps);
+    else runs.push({ weight, reps: [row.reps] });
+  }
+  return runs
+    .map(({ weight, reps }) => {
+      const count = reps.every((r) => r === reps[0]) ? `${reps.length}×${reps[0]}` : reps.join(", ");
+      if (weight <= 0) return count;
+      return `${reps.length === 1 ? reps[0] : count} @ ${weight} kg`;
+    })
+    .join(" · ");
+}
