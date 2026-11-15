@@ -36,9 +36,20 @@ export default defineRailway(() => {
   });
 
   // No domain or healthcheck: it only talks to Postgres. SIGTERM lets it finish its batch.
+  // Watch paths: only rebuild when the worker's own code or what it imports changes.
   const worker = service("worker", {
     source: REPO,
-    build: { buildEnvironment: "V3", builder: "RAILPACK" },
+    build: {
+      buildEnvironment: "V3",
+      builder: "RAILPACK",
+      watchPatterns: [
+        "worker/**",
+        "shared/**",
+        "server/utils/schema.ts",
+        "package.json",
+        "package-lock.json",
+      ],
+    },
     start: "node worker/index.ts",
     replicas: { [REGION]: 1 },
     env: { DATABASE_URL: db.env.DATABASE_URL },
