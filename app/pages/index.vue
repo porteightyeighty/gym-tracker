@@ -616,7 +616,6 @@ function timeOf(value: string) {
                 {{ selectedExercise?.name ?? "Choose exercise" }}
               </div>
               <p v-if="currentTarget" class="muted">Target {{ currentTarget }}</p>
-              <p v-else-if="selectedExercise" class="muted">{{ selectedExercise.type }}</p>
             </div>
             <button type="button" class="ghost" @click="pickerOpen = !pickerOpen">
               {{ pickerOpen ? "Close" : "Change" }}
