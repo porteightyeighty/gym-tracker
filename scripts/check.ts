@@ -24,6 +24,7 @@ import {
 } from "../shared/analysis.ts";
 import { weightIncrement } from "../shared/equipment.ts";
 import { buildDemoHistory } from "../shared/demo.ts";
+import { summariseWorkout } from "../shared/workout.ts";
 
 const valid = {
   exerciseId: "123e4567-e89b-12d3-a456-426614174000",
@@ -101,6 +102,21 @@ assert.equal(formatSetLoad({ reps: 10, weightKg: "27.50", durationSeconds: null 
   );
   assert.equal(formatSessionSummary([]), "");
 }
+
+const recap = summariseWorkout([
+  { exerciseId: "b", exerciseName: "Row", reps: 8, weightKg: "50.00", performedAt: "2026-01-01T10:10:00Z" },
+  { exerciseId: "a", exerciseName: "Bench", reps: 5, weightKg: "80.00", performedAt: "2026-01-01T10:05:00Z" },
+  { exerciseId: "a", exerciseName: "Bench", reps: 5, weightKg: "82.50", performedAt: "2026-01-01T10:00:00Z" },
+  { exerciseId: "c", exerciseName: "Run", reps: 0, weightKg: "0.00", durationSeconds: 600, distanceKm: "2.00", performedAt: "2026-01-01T10:20:00Z" },
+]);
+assert.equal(recap.sets, 4);
+assert.equal(recap.volumeKg, 1213); // 412.5 + 400 + 400; cardio adds nothing
+assert.deepEqual(recap.exercises.map((e) => [e.name, e.loads]), [
+  ["Bench", ["82.5 kg × 5", "80 kg × 5"]],
+  ["Row", ["50 kg × 8"]],
+  ["Run", ["10:00 · 2 km"]],
+]);
+assert.deepEqual(summariseWorkout([]), { sets: 0, volumeKg: 0, exercises: [] });
 
 const parsedMeta = parseSetInput({ ...valid, notes: "  hard  ", rpe: 7.5 });
 assert.equal(parsedMeta.notes, "hard");
