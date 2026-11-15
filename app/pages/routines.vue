@@ -119,26 +119,14 @@ async function copyLastSession() {
       info.value = "No completed workout to copy from yet.";
       return;
     }
-    if (copyTargets.value) {
-      rows.value = last.exercises.map((row) => ({
-        exerciseId: row.exerciseId,
-        targetSets: String(row.targetSets),
-        targetReps: String(row.targetReps),
-        targetWeightKg: String(Number(row.targetWeightKg)),
-      }));
-    } else {
-      // Exercise list only; keep any targets already in the draft for those exercises.
-      const draft = new Map(rows.value.map((row) => [row.exerciseId, row]));
-      rows.value = last.exercises.map(
-        (row) =>
-          draft.get(row.exerciseId) ?? {
-            exerciseId: row.exerciseId,
-            targetSets: "",
-            targetReps: "",
-            targetWeightKg: "",
-          },
-      );
-    }
+    // Replaces the whole draft, so copying again unticked clears targets a ticked copy filled in.
+    const withTargets = copyTargets.value;
+    rows.value = last.exercises.map((row) => ({
+      exerciseId: row.exerciseId,
+      targetSets: withTargets ? String(row.targetSets) : "",
+      targetReps: withTargets ? String(row.targetReps) : "",
+      targetWeightKg: withTargets ? String(Number(row.targetWeightKg)) : "",
+    }));
     info.value = last.startedAt
       ? `Copied ${last.exercises.length} exercises from ${new Date(last.startedAt).toLocaleDateString(
           undefined,
