@@ -45,11 +45,19 @@ interface LastSession {
   }[];
 }
 
+definePageMeta({ keepalive: true });
+
 const requestFetch = useRequestFetch();
-const [{ data: routines, refresh: refreshRoutines }, { data: exercises }] = await Promise.all([
+const [
+  { data: routines, refresh: refreshRoutines },
+  { data: exercises, refresh: refreshExercises },
+] = await Promise.all([
   useFetch<{ items: Routine[] }>("/api/routines"),
   useFetch<Exercise[]>("/api/exercises"),
 ]);
+
+// The draft (form, rows) is local state, so a refresh here never touches it.
+onTabReturn(() => Promise.all([refreshRoutines(), refreshExercises()]));
 
 const sortedExercises = computed(() =>
   [...(exercises.value ?? [])].sort((a, b) => a.name.localeCompare(b.name)),

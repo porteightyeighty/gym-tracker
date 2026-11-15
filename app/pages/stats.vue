@@ -13,6 +13,14 @@ interface BodyWeightRow {
   measuredAt: string;
 }
 
+interface Exercise {
+  id: string;
+  name: string;
+  type: string;
+}
+
+definePageMeta({ keepalive: true });
+
 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const weeks = ref(12);
 const requestFetch = useRequestFetch();
@@ -36,7 +44,11 @@ const from = computed(() => {
   return start;
 });
 
-const [{ data, error }, { data: weights, refresh: refreshWeights }] = await Promise.all([
+const [
+  { data, error, refresh: refreshStats },
+  { data: weights, refresh: refreshWeights },
+  { data: exercises, refresh: refreshExercises },
+] = await Promise.all([
   useAsyncData(
     () => `stats-${weeks.value}`,
     () =>
@@ -46,7 +58,19 @@ const [{ data, error }, { data: weights, refresh: refreshWeights }] = await Prom
     { watch: [weeks] },
   ),
   useFetch<{ items: BodyWeightRow[] }>("/api/body-weights?limit=30"),
+  useFetch<Exercise[]>("/api/exercises"),
 ]);
+
+onTabReturn(() => Promise.all([refreshStats(), refreshWeights(), refreshExercises()]));
+
+// Per-exercise pages (PBs, plateau, next target) were only reachable from a History row.
+const exerciseFilter = ref("");
+const filteredExercises = computed(() => {
+  const needle = exerciseFilter.value.trim().toLowerCase();
+  return [...(exercises.value ?? [])]
+    .filter((ex) => !needle || ex.name.toLowerCase().includes(needle))
+    .sort((a, b) => a.name.localeCompare(b.name));
+});
 
 function formatWeek(week: string) {
   return new Date(`${week}T00:00:00`).toLocaleDateString(undefined, {
@@ -257,6 +281,25 @@ function shortDate(value: string | Date) {
       </table>
       <p v-else class="muted">No sets in this range.</p>
     </template>
+
+    <h2>Exercises</h2>
+    <div class="card">
+      <input
+        v-model="exerciseFilter"
+        type="search"
+        placeholder="Find an exercise"
+        aria-label="Find an exercise"
+      />
+      <ul v-if="filteredExercises.length" class="exercise-links">
+        <li v-for="ex in filteredExercises" :key="ex.id">
+          <NuxtLink :to="`/exercises/${ex.id}`">
+            <span>{{ ex.name }}</span>
+            <span class="muted">{{ ex.type }}</span>
+          </NuxtLink>
+        </li>
+      </ul>
+      <p v-else class="muted">No matching exercises.</p>
+    </div>
 
     <h2>Body weight</h2>
     <form class="card" @submit.prevent="saveWeight">

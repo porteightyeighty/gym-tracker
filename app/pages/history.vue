@@ -20,6 +20,8 @@ interface SetRow {
   records: { kind: string; reps: number }[];
 }
 
+definePageMeta({ keepalive: true });
+
 const PAGE_SIZE = 20;
 const requestFetch = useRequestFetch();
 
@@ -40,6 +42,18 @@ watch(
   },
   { immediate: true },
 );
+
+// Refetch everything already loaded (the API caps at 100) so returning keeps your place.
+onTabReturn(async () => {
+  const limit = Math.min(Math.max(PAGE_SIZE, rows.value.length), 100);
+  try {
+    const page = await requestFetch<{ items: SetRow[]; hasMore: boolean }>(`/api/sets?limit=${limit}`);
+    rows.value = page.items;
+    hasMore.value = page.hasMore;
+  } catch {
+    // Keep showing what we had.
+  }
+});
 
 async function loadMore() {
   loadingMore.value = true;
