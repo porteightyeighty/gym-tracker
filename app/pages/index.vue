@@ -142,7 +142,7 @@ const lastSet = ref<LastSet | null>(null);
 const analysis = ref<Analysis | null>(null);
 const error = ref("");
 const busy = ref(false);
-const detailsOpen = ref(false);
+const detailsOpen = ref(true);
 const pickerOpen = ref(false);
 
 const workoutNotes = ref("");
