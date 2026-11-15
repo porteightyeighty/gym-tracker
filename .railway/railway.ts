@@ -19,13 +19,22 @@ export default defineRailway(() => {
   // default region (sfo) and ignores the database's region. The volume is where the data lives.
   const dbVolume = volume("gymdb-volume", { region: REGION, sizeMB: 5000, allowOnlineResize: true });
 
-  // Watch paths: everything but the worker's own code (shared/ and the schema still rebuild both).
+  // Watch paths: everything but the worker's own code, docs, CI, tests and this config
+  // (shared/ and the schema still rebuild both; scripts/ stays because preDeploy runs it).
   const web = service("web", {
     source: REPO,
     build: {
       buildEnvironment: "V3",
       builder: "RAILPACK",
-      watchPatterns: ["**", "!worker/**"],
+      watchPatterns: [
+        "**",
+        "!worker/**",
+        "!**/*.md",
+        "!docs/**",
+        "!.railway/**",
+        "!.github/**",
+        "!tests/**",
+      ],
     },
     healthcheck: "/login",
     domains: ["gym.mattport.com"],
