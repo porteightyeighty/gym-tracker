@@ -39,6 +39,9 @@ interface LastSession {
     exerciseId: string;
     name: string;
     type: string;
+    targetSets: number;
+    targetReps: number;
+    targetWeightKg: string;
   }[];
 }
 
@@ -58,6 +61,7 @@ const rows = ref<DraftRow[]>([]);
 const error = ref("");
 const info = ref("");
 const busy = ref(false);
+const copyTargets = ref(false);
 
 function resetForm() {
   editingId.value = null;
@@ -115,17 +119,26 @@ async function copyLastSession() {
       info.value = "No completed workout to copy from yet.";
       return;
     }
-    // Copy the exercise list only; keep any targets already in the draft for those exercises.
-    const draft = new Map(rows.value.map((row) => [row.exerciseId, row]));
-    rows.value = last.exercises.map(
-      (row) =>
-        draft.get(row.exerciseId) ?? {
-          exerciseId: row.exerciseId,
-          targetSets: "",
-          targetReps: "",
-          targetWeightKg: "",
-        },
-    );
+    if (copyTargets.value) {
+      rows.value = last.exercises.map((row) => ({
+        exerciseId: row.exerciseId,
+        targetSets: String(row.targetSets),
+        targetReps: String(row.targetReps),
+        targetWeightKg: String(Number(row.targetWeightKg)),
+      }));
+    } else {
+      // Exercise list only; keep any targets already in the draft for those exercises.
+      const draft = new Map(rows.value.map((row) => [row.exerciseId, row]));
+      rows.value = last.exercises.map(
+        (row) =>
+          draft.get(row.exerciseId) ?? {
+            exerciseId: row.exerciseId,
+            targetSets: "",
+            targetReps: "",
+            targetWeightKg: "",
+          },
+      );
+    }
     info.value = last.startedAt
       ? `Copied ${last.exercises.length} exercises from ${new Date(last.startedAt).toLocaleDateString(
           undefined,
@@ -267,6 +280,10 @@ async function startRoutine(id: string) {
         <button type="button" class="ghost" :disabled="busy" @click="copyLastSession">
           Copy from last session
         </button>
+        <label class="check">
+          <input v-model="copyTargets" type="checkbox" />
+          Copy targets too
+        </label>
       </div>
 
       <button type="submit" class="primary block" :disabled="busy || !rows.length">

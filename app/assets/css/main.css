@@ -804,6 +804,18 @@ th {
   text-align: center;
 }
 
+label.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+}
+
 .edit-row .tools {
   display: flex;
   gap: 0.1rem;
