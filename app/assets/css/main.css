@@ -681,6 +681,41 @@ details[open] summary::before {
   margin: 0;
 }
 
+/* ---------- finish summary ---------- */
+
+.summary {
+  display: grid;
+  gap: 1rem;
+}
+
+.summary-row {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.summary-row:last-child {
+  border-bottom: 0;
+}
+
+.summary-notes {
+  display: grid;
+  gap: 0.4rem;
+  justify-items: center;
+  text-align: center;
+}
+
+.summary-notes label {
+  font-weight: 700;
+}
+
+.summary-notes textarea {
+  max-width: 32rem;
+  text-align: center;
+  resize: vertical;
+}
+
 /* ---------- stats ---------- */
 
 .stat-grid {
