@@ -103,11 +103,13 @@ function nowLocal() {
 
 const requestFetch = useRequestFetch();
 
+definePageMeta({ keepalive: true });
+
 // Fetched in parallel: awaiting each in turn made every visit wait for four round trips.
 const [
   { data: exercises, refresh: refreshExercises },
   { data: activeWorkout, refresh: refreshActive },
-  { data: routines },
+  { data: routines, refresh: refreshRoutines },
   { data: setPage, refresh: refreshSets },
 ] = await Promise.all([
   useFetch<Exercise[]>("/api/exercises"),
@@ -151,10 +153,11 @@ const summaryOpen = ref(false);
 const now = ref<number | null>(null);
 let clock: ReturnType<typeof setInterval> | undefined;
 
+// Keyed on the id so a refresh of the same workout doesn't wipe notes being typed.
 watch(
-  activeWorkout,
-  (workout) => {
-    workoutNotes.value = workout?.notes ?? "";
+  () => activeWorkout.value?.id,
+  () => {
+    workoutNotes.value = activeWorkout.value?.notes ?? "";
     summaryOpen.value = false;
   },
   { immediate: true },
@@ -199,6 +202,15 @@ onMounted(() => {
   clock = setInterval(() => {
     now.value = Date.now();
   }, 1_000);
+});
+
+onTabReturn(() =>
+  Promise.all([refreshActive(), refreshSets(), refreshRoutines(), refreshExercises()]),
+);
+
+// The page is kept alive, so History's "edit set" / "add set" hand-offs arrive on activation
+// (which also fires on first mount), not only on mount.
+onActivated(() => {
   if (pendingEdit.value) {
     startEdit(pendingEdit.value);
     pendingEdit.value = null;

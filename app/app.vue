@@ -10,8 +10,18 @@ const tabs = [
 
 const showTabs = computed(() => route.path !== "/login");
 
+// Drill-down pages (an exercise) belong to whichever tab they were opened from.
+const lastTab = useState("last-tab", () => "/");
+watch(
+  () => route.path,
+  (path) => {
+    if (tabs.some((tab) => tab.to === path)) lastTab.value = path;
+  },
+  { immediate: true },
+);
+
 function isActive(to: string) {
-  if (to === "/") return route.path === "/" || route.path.startsWith("/exercises");
+  if (route.path.startsWith("/exercises")) return lastTab.value === to;
   return route.path === to;
 }
 </script>
